@@ -1,15 +1,18 @@
-### ASR-FastRTC
+### IntraScribe
 
-完全本地化的实时语音转写与会议总结系统：支持浏览器端录音，通过 WebRTC 低延迟推流到后端进行实时 ASR；会话结束后自动进行说话人分离与高质量批处理转写；支持 AI 总结与标题生成、模板化输出、编辑与二次处理能力，并以 Supabase 作为账号、数据与存储后端。
+面向企业、学校与机关等内网环境的本地优先语音转写与协作平台：支持实时转写、说话人分离、高质量批处理、AI 总结与标题生成。默认提供浏览器 WebRTC 接入与 SSE 实时返回，也支持边缘设备/硬件作为前端，架构解耦、可替换任意采集与传输方案；数据全程留在本地，重视隐私与合规。
 
-![项目演示视频](doc/demo.mp4)
+![项目演示视频](https://www.bilibili.com/video/BV14AbhzXEKc/)
 
 
 ---
 
 ### 功能特性
 
-- 实时转写（FastRTC + 本地 ASR）：浏览器端录音，WebRTC 推流到后端，SSE 实时返回转写片段；支持断字清理与时间戳格式化。
+- 本地优先与隐私保护：可在内网/离线环境独立部署，数据不外发，满足隐私与合规要求。
+- 团队与组织协作：账号体系、模板共享与编辑流程，适配企业/学校多用户协作。
+- 硬件友好与可插拔前端：支持浏览器或边缘设备/硬件作为采集端，传输方案可替换。
+- 实时转写（本地 ASR）：浏览器或硬件端录音，低延迟推流到后端，SSE 实时返回转写片段；支持断字清理与时间戳格式化。
 - 批处理高质量转写：会话结束后整合缓存音频，自动上传至 Supabase Storage，调用通用音频处理服务进行说话人分离与重转写，提升质量与结构化程度。
 - 说话人分离与重命名：基于 pyannote.audio 的说话人分离，完成后在前端可双击标签重命名，并同步更新数据库中的转写 segments。
 - AI 总结与标题生成：集成 LiteLLM，支持按模板生成结构化 Markdown 总结，并自动生成简洁标题；支持回退策略。
@@ -21,11 +24,20 @@
 
 ---
 
+### 适用场景
+
+- 企业/事业单位内网部署的会议记录与知识沉淀
+- 学校/研究机构的课堂与研讨记录（支持多人与说话人标注）
+- 会议室/指挥中心/生产现场等对隐私与延迟敏感的场景
+- 涉及敏感数据的法务、医疗、研发等不允许数据外发的团队
+
+---
+
 ### 技术栈
 
 - 前端：Next.js (App Router) + React + TypeScript + Tailwind CSS
 - 后端：FastAPI（Python，使用 uv 管理依赖与运行）
-- 实时：基于FastRTC框架，WebRTC（浏览器推流）+ SSE（服务端事件流返回转写输出）
+- 实时：默认 WebRTC（浏览器推流）+ SSE（服务端事件流返回转写输出）；架构解耦，可替换其他采集/传输方案
 - ASR：FunASR（本地模型，可 GPU 加速），适配器 `LocalFunASR`
 - 说话人分离：pyannote.audio（需 HuggingFace token登录下载，可 GPU 加速）
 - AI 总结/标题：LiteLLM（可配置多模型与回退策略）
@@ -37,7 +49,7 @@
 ### 目录结构
 
 ```text
-asr-fastrtc/
+intrascribe/
   backend/
     app/
       api.py                       # API 路由与端点定义（/api/v1/...）
@@ -49,7 +61,7 @@ asr-fastrtc/
       audio_converter.py           # FFmpeg 封装
       schemas.py, models.py        # DTO 与领域模型
       clients.py, repositories.py  # 外部服务与数据访问
-    main_v1.py                     # FastRTC 集成与转写流入口
+    main_v1.py                     # 实时音频流入口（默认 WebRTC 接入实现）
     config.yaml                    # AI 总结与 STT 相关配置
     pyproject.toml                 # 后端依赖
   web/
@@ -154,7 +166,7 @@ npm run dev
 - 登录（Supabase Auth）后进入首页。
 - 点击“开始录音”：
   - 前端调用后端 `POST /api/v1/sessions` 创建会话，得到 `session_id`。
-  - 浏览器用 `session_id` 作为 `webrtc_id` 调用 `/webrtc/offer` 建立 WebRTC 音频通道。
+  - 默认实现：浏览器用 `session_id` 作为 `webrtc_id` 调用 `/webrtc/offer` 建立 WebRTC 音频通道（也可替换为其他传输方案）。
   - 前端通过 SSE 订阅 `/transcript?webrtc_id=...&token=...`，实时接收转写片段。
 - 点击“停止录音”：
   - 断开 WebRTC，调用 `POST /api/v1/sessions/{session_id}/finalize`。
@@ -219,3 +231,9 @@ npm run dev
 
 ### License
 MIT
+
+### TODO
+展成会议助手功能
+
+- 增加硬件接入
+- 增加AI对话
