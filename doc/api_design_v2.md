@@ -1,4 +1,4 @@
-# ASR-FastRTC API 设计文档 V1
+# intrascribe API 设计文档 V1
 
 ## 1. API 概览
 
@@ -539,7 +539,7 @@ GET /api/v1/sessions/{session_id}/audio_files/{file_id}
 ## 8. 客户端集成示例
 
 ```javascript
-// ASR-FastRTC Client (Simplified Example)
+// intrascribe Client (Simplified Example)
 
 // 0. 假设用户已通过 Supabase 登录
 // const { data, error } = await supabase.auth.signInWithPassword(...)

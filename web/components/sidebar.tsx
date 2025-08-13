@@ -56,7 +56,7 @@ export function Sidebar({ currentView, onViewChange, user }: SidebarProps) {
               <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
                 <Mic className="w-5 h-5 text-primary-foreground" />
               </div>
-              <h1 className="text-lg font-bold text-gray-800">ASR FastRTC</h1>
+              <h1 className="text-lg font-bold text-gray-800">intrascribe</h1>
             </div>
           )}
           <Button

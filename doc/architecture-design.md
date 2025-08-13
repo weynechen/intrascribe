@@ -1,4 +1,4 @@
-# ASR-FastRTC 架构设计文档
+# intrascribe 架构设计文档
 
 ## 1. 总体架构概览
 

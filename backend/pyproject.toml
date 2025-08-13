@@ -1,7 +1,7 @@
 [project]
-name = "asr-fastrtc-backend"
+name = "intrascribe-backend"
 version = "0.1.0"
-description = "ASR FastRTC Backend Service"
+description = "intrascribe Backend Service"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

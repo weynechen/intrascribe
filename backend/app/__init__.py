@@ -1,4 +1,4 @@
-# ASR-FastRTC 应用包
+# intrascribe 应用包
 __version__ = "1.0.0" 
 
 # Import audio processing service

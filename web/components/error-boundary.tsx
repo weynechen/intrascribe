@@ -75,7 +75,7 @@ export class ErrorBoundary extends React.Component<
           if (typeof window !== 'undefined') {
             // 清理Supabase认证相关的localStorage
             Object.keys(localStorage).forEach(key => {
-              if (key.includes('supabase') || key.includes('auth') || key.includes('asr-fastrtc')) {
+              if (key.includes('supabase') || key.includes('auth') || key.includes('intrascribe')) {
                 console.log('🗑️ 清理localStorage key:', key)
                 localStorage.removeItem(key)
               }

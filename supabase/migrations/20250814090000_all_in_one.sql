@@ -1,4 +1,4 @@
--- All-in-one migration: create all schema objects for ASR-FastRTC
+-- All-in-one migration: create all schema objects for intrascribe
 -- 包含：扩展、所有表/索引/RLS/触发器/视图/函数、summary_templates、recording_sessions.template_id、ai_summaries.template_id、auth->public 用户触发器与回填
 
 BEGIN;

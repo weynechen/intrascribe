@@ -26,7 +26,7 @@ function createSupabaseClient(): ReturnType<typeof createClient> {
         persistSession: true,
         detectSessionInUrl: true,
         storage: typeof window !== 'undefined' ? window.localStorage : undefined,
-        storageKey: 'asr-fastrtc-auth',
+        storageKey: 'intrascribe-auth',
         flowType: 'pkce'
       }
     })
@@ -41,7 +41,7 @@ function createSupabaseClient(): ReturnType<typeof createClient> {
         persistSession: true,
         detectSessionInUrl: true,
         storage: typeof window !== 'undefined' ? window.localStorage : undefined,
-        storageKey: 'asr-fastrtc-auth',
+        storageKey: 'intrascribe-auth',
         flowType: 'pkce'
       },
       realtime: {
@@ -51,7 +51,7 @@ function createSupabaseClient(): ReturnType<typeof createClient> {
       },
       global: {
         headers: {
-          'x-client-info': 'asr-fastrtc-web@1.0.0'
+          'x-client-info': 'intrascribe-web@1.0.0'
         }
       }
     })

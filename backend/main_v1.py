@@ -1,5 +1,5 @@
 """
-ASR-FastRTC 应用入口
+intrascribe 应用入口
 负责初始化和启动FastAPI应用
 """
 import logging
@@ -67,7 +67,7 @@ logger.info("🚀 日志系统初始化完成")
 
 # 创建FastAPI应用
 app = FastAPI(
-    title="ASR-FastRTC API",
+    title="intrascribe API",
     description="自动语音识别与实时通信平台",
     version="1.0.0",
     debug=settings.debug
@@ -291,7 +291,7 @@ cur_dir = Path(__file__).parent
 @app.on_event("startup")
 async def startup_event():
     """应用启动事件"""
-    logger.info("🎬 ASR-FastRTC 应用启动中...")
+    logger.info("🎬 intrascribe 应用启动中...")
     logger.info(f"📖 配置信息:")
     logger.info(f"  - Debug模式: {settings.debug}")
     logger.info(f"  - API版本: {settings.api_version}")
@@ -321,7 +321,7 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_event():
     """应用关闭事件"""
-    logger.info("🛑 ASR-FastRTC 应用正在关闭...")
+    logger.info("🛑 intrascribe 应用正在关闭...")
     
     # 清理会话缓存
     active_sessions = list(cache_manager.session_caches.keys())
