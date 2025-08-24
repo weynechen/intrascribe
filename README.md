@@ -81,19 +81,32 @@ intrascribe/
 ### 快速开始
 
 #### 1) 前置条件
-- Node.js 18+
-- Python 3.10+ 与 uv（python 包管理/运行器）
-- FFmpeg
-- ollama qwen3:8b。（可选。如果不用这个模型，需要在后端的config.yaml中修改）
+以下为ubuntu下的示范：
 
+- Node.js 18+
+- Python 3.10+ 与 uv（python 包管理/运行器），参考：https://docs.astral.sh/uv/getting-started/installation/#installation-methods 
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+- ollama qwen3:8b。（可选。如果不用这个模型，需要修改 backend/config.yaml文件中的模型配置）
+- FFmpeg
 ```bash
 sudo apt install ffmpeg
 ```
-- supabase。参考链接： https://supabase.com/docs/guides/local-development 。进行安装。
+- supabase。参考链接： https://supabase.com/docs/guides/local-development ，进行安装。
+
+```bash
+npm install supabase --save-dev
+```
+
+安装过程中，npm 需要从github 下载二进制包，如果一直卡着不动，可手动下载和安装：
+https://github.com/supabase/cli/releases
+
 
 #### 2) clone项目到本地
 ```
-git clone 
+git clone https://github.com/weynechen/intrascribe.git
 ```
 
 #### 3) 启动数据库
@@ -103,6 +116,9 @@ cd supabase
 # 启动套件
 supabase start
 ```
+
+supbase 会下载一系列的docker image，耗时较久，耐心等待。
+
 启动成功后，会出现信息：
 ```txt
          API URL: http://127.0.0.1:54321
@@ -118,7 +134,7 @@ service_role key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZ
    S3 Secret Key: 850181e4652dd023b7a98c58ae0d2d34bd487ee0cc3254aed6eda37307425907
        S3 Region: local
 ```
-如果过程中出现502错误，可以选择部分启动
+如果过程中出现502错误（网络问题），可以排除edge-runtime ：
 ```bash
 sudo supabase start -x edge-runtime
 ```
@@ -127,6 +143,9 @@ sudo supabase start -x edge-runtime
 # 初始化数据库
 supabase db reset
 ```
+访问 http://127.0.0.1:54323/project/default 查看数据是否存在。
+
+注：上述操作只需操作一次即可。
 
 #### 2) 配置环境变量（请自行创建/修改文件）
 - 前端 `web/.env.local`（示例内容）：
@@ -142,6 +161,7 @@ SUPABASE_URL=你的Supabase项目URL
 
 SUPABASE_ANON_KEY = 你的Supabase匿名Key
 SUPABASE_SERVICE_ROLE_KEY = 你的Supabase ROLE Key
+# 访问：https://huggingface.co/settings/tokens
 HUGGINGFACE_TOKEN=你的huggingface token
 PYANNOTE_MODEL=pyannote/speaker-diarization-3.1
 ```
@@ -155,6 +175,34 @@ uv run main_v1.py
 ```
 默认监听 `http://localhost:8000`。
 
+初次运行，会要下载较多的模型文件。国内可设置
+```bash
+export HF_ENDPOINT=https://hf-mirror.com
+```
+再 `uv run` 可加快下载速度。
+
+启动过程需要连接网络，如果网络不好，启动时间会变长，出现如下为启动成功：
+```txt
+2025-08-24 21:54:44,216 - __main__ - INFO -   - [POST] /api/v1/transcriptions
+2025-08-24 21:54:44,216 - __main__ - INFO -   - [PUT] /api/v1/transcriptions/{transcription_id}
+2025-08-24 21:54:44,216 - __main__ - INFO -   - [POST] /api/v1/save_ai_summaries
+2025-08-24 21:54:44,216 - __main__ - INFO -   - [PUT] /api/v1/update_ai_summaries/{summary_id}
+2025-08-24 21:54:44,216 - __main__ - INFO -   - [POST] /api/v1/audio/process
+2025-08-24 21:54:44,216 - __main__ - INFO -   - [POST] /api/v1/audio/session/set
+2025-08-24 21:54:44,216 - __main__ - INFO -   - [GET] /api/v1/audio/session/current
+2025-08-24 21:54:44,217 - __main__ - INFO -   - [POST] /api/v1/batch-transcription
+2025-08-24 21:54:44,217 - __main__ - INFO -   - [GET] /api/v1/audio/cache/status
+2025-08-24 21:54:44,217 - __main__ - INFO -   - [GET] /
+2025-08-24 21:54:44,217 - __main__ - INFO -   - [POST] /webrtc/offer
+2025-08-24 21:54:44,217 - __main__ - INFO -   - [POST] /telephone/incoming
+2025-08-24 21:54:44,217 - __main__ - INFO -   - [POST] /send_input
+2025-08-24 21:54:44,217 - __main__ - INFO -   - [GET] /transcript
+2025-08-24 21:54:44,217 - __main__ - INFO - 🚀 应用启动完成！
+INFO:     Visit https://fastrtc.org/userguide/api/ for WebRTC or Websocket API docs.
+2025-08-24 21:54:44,217 - uvicorn.error - INFO - Application startup complete.
+2025-08-24 21:54:44,217 - uvicorn.error - INFO - Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+```
+
 #### 5) 启动前端（Next.js）
 ```bash
 cd web
@@ -164,6 +212,10 @@ npm run dev
 默认访问 `http://localhost:3000`。
 
 ---
+
+备注：
+1. 本地开发和使用，目前我只在 ubuntu22.04 进行过。
+2. 局域网内使用，最好搭配 nginx 做成https方式（没有在仓库中，需自行搭建），否则会包安全问题。我在win10上测试可用。
 
 ### 运行流程（端到端）
 - 登录（Supabase Auth）后进入首页。
@@ -229,14 +281,15 @@ npm run dev
   - 确认 FFmpeg 安装并在 PATH 中；查看后端日志中的命令与错误消息。
 - 无法生成总结/标题？
   - 检查后端是否已正确配置模型与 API Key（LiteLLM）。
-
+- CUDA警告？
+  - 检查pytorch cuda版本与系统的NVIDIA 驱动版本
 ---
 
 ### License
 MIT
 
 ### TODO
-展成会议助手功能
+开发会议助手硬件：
 
-- 增加硬件接入
-- 增加AI对话
+- 增加麦克风阵列硬件接入
+- 增加AI对话功能，使用RAG实时回答记录相关的问题
