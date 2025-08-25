@@ -31,7 +31,7 @@ const nextConfig = {
           source: '/supabase/:path*',
           destination: 'http://localhost:54321/:path*',
         },
-        // Storage proxy - 本地开发访问本地 Supabase Storage
+        // Storage proxy
         {
           source: '/storage/:path*',
           destination: 'http://localhost:54321/storage/:path*',

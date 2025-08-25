@@ -83,13 +83,14 @@ intrascribe/
 #### 1) 前置条件
 以下为ubuntu下的示范：
 
+- nvidia GPU 电脑，cuda升级到最新版本。（理论上也支持纯CPU，但我没有测试过）
 - Node.js 18+
 - Python 3.10+ 与 uv（python 包管理/运行器），参考：https://docs.astral.sh/uv/getting-started/installation/#installation-methods 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-- ollama qwen3:8b。（可选。如果不用这个模型，需要修改 backend/config.yaml文件中的模型配置）
+- ollama qwen3:8b。（可选其他模型，需要修改 backend/config.yaml文件中的模型配置）
 - FFmpeg
 ```bash
 sudo apt install ffmpeg
@@ -145,15 +146,18 @@ supabase db reset
 ```
 访问 http://127.0.0.1:54323/project/default 查看数据是否存在。
 
-注：上述操作只需操作一次即可。
+注：reset操作只需操作一次即可，否则数据库会被清理掉。如果需要重启supabase，运行
+
+```bash
+cd supabase
+supabase stop
+supabase start
+```
 
 #### 2) 配置环境变量（请自行创建/修改文件）
 - 前端 `web/.env.local`（示例内容）：
 ```bash
-NEXT_PUBLIC_SUPABASE_URL=你的Supabase项目URL
 NEXT_PUBLIC_SUPABASE_ANON_KEY=你的Supabase匿名Key
-# 后端 FastAPI 的对外地址（前端API代理会调用它）
-BACKEND_URL=http://localhost:8000
 ```
 - 后端 `backend/.env`（示例内容）：
 ```bash
@@ -161,13 +165,21 @@ SUPABASE_URL=你的Supabase项目URL
 
 SUPABASE_ANON_KEY = 你的Supabase匿名Key
 SUPABASE_SERVICE_ROLE_KEY = 你的Supabase ROLE Key
-# 访问：https://huggingface.co/settings/tokens
+# 访问：https://huggingface.co/settings/tokens 申请
 HUGGINGFACE_TOKEN=你的huggingface token
 PYANNOTE_MODEL=pyannote/speaker-diarization-3.1
 ```
 提示：请根据你的实际部署地址与密钥填写，以上仅为示例。请不要把密钥提交到仓库。
 
 #### 4) 启动后端（FastAPI）
+
+初次运行，会要下载较多的模型文件。国内可设置镜像加快下载速度。
+
+```bash
+export HF_ENDPOINT=https://hf-mirror.com
+```
+随后运行
+
 ```bash
 cd backend
 uv sync
@@ -175,11 +187,6 @@ uv run main_v1.py
 ```
 默认监听 `http://localhost:8000`。
 
-初次运行，会要下载较多的模型文件。国内可设置
-```bash
-export HF_ENDPOINT=https://hf-mirror.com
-```
-再 `uv run` 可加快下载速度。
 
 启动过程需要连接网络，如果网络不好，启动时间会变长，出现如下为启动成功：
 ```txt
@@ -209,13 +216,55 @@ cd web
 npm install
 npm run dev
 ```
-默认访问 `http://localhost:3000`。
+随后再本机可访问 `http://localhost:3000`。
 
 ---
 
 备注：
-1. 本地开发和使用，目前我只在 ubuntu22.04 进行过。
-2. 局域网内使用，最好搭配 nginx 做成https方式（没有在仓库中，需自行搭建），否则会包安全问题。我在win10上测试可用。
+1. 目前我只在 ubuntu22.04 进行过安装测试。
+2. 如默认端口更改，需要修改 `next.config.js` 中的代理。
+3. 在局域网内使用，最好搭配 nginx 做https代理（没有在仓库中，需自行搭建）。本项目提供next.js代理方式，操作如下：
+
+安装mkcert
+
+``` bash
+cd web
+
+# 1. 安装依赖
+sudo apt update
+sudo apt install libnss3-tools
+
+# 2. 下载mkcert
+wget https://github.com/FiloSottile/mkcert/releases/download/v1.4.4/mkcert-v1.4.4-linux-amd64
+
+# 3. 添加执行权限并移动到系统路径
+chmod +x mkcert-v1.4.4-linux-amd64
+sudo mv mkcert-v1.4.4-linux-amd64 /usr/local/bin/mkcert
+
+# 4. 验证安装
+mkcert -version
+```
+
+创建本地CA和证书
+
+```bash
+# 1. 安装本地CA到系统信任存储
+mkcert -install
+
+# 2. 为localhost生成证书
+mkcert localhost 127.0.0.1 ::1
+```
+执行后会生成两个文件：
+localhost+2.pem (证书文件)
+localhost+2-key.pem (私钥文件)
+
+随后运行
+
+```bash
+npm run dev_https
+```
+随后可在局域网内通过 https://you_machine_ip:3000 访问
+
 
 ### 运行流程（端到端）
 - 登录（Supabase Auth）后进入首页。

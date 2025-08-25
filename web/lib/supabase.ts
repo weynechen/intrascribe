@@ -1,10 +1,14 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+// 始终使用Next.js代理，无论HTTP还是HTTPS都能正常工作
+const supabaseUrl = typeof window !== 'undefined' 
+  ? `${window.location.origin}/supabase`  // 浏览器环境：使用当前域名 + 代理路径
+  : 'http://localhost:3000/supabase'      // 服务器环境：使用本地地址 + 代理路径
+
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables')
+if (!supabaseAnonKey) {
+  throw new Error('Missing NEXT_PUBLIC_SUPABASE_ANON_KEY environment variable')
 }
 
 // 全局单例模式：确保只创建一个Supabase客户端实例

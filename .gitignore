@@ -11,4 +11,5 @@ wheels/
 .venv
 .cursor
 .next
+*.pem
 node_modules

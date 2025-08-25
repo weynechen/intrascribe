@@ -58,9 +58,21 @@ export function Header({
         if (data && data.length > 0) {
           const audioFile = data[0] // 取第一个音频文件
           
-          setAudioUrl(audioFile.public_url)
+          // 将原始URL转换为通过代理访问的URL
+          const originalUrl = audioFile.public_url
+          let proxyUrl = originalUrl
+          
+          // 如果是HTTP地址，转换为代理路径
+          if (originalUrl && originalUrl.startsWith('http://localhost:54321/')) {
+            proxyUrl = originalUrl.replace('http://localhost:54321/', '/')
+          } else if (originalUrl && originalUrl.includes('localhost:54321')) {
+            // 处理其他可能的格式
+            proxyUrl = originalUrl.replace(/https?:\/\/[^/]*localhost:54321\//, '/')
+          }
+          
+          setAudioUrl(proxyUrl)
           setHasAudio(true)
-          console.log('✅ 音频URL已获取:', audioFile.public_url)
+          console.log('✅ 音频URL已获取:', proxyUrl, '(原始URL:', originalUrl, ')')
         } else {
           setHasAudio(false)
           setAudioUrl(undefined)

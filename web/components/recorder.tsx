@@ -116,10 +116,8 @@ export function Recorder({ onTranscript, onRecordingStateChange, onSessionCreate
 
   // 设置实时转录监听
   const setupTranscriptListener = useCallback((sessionId: string, token: string) => {
-    // 在开发环境下直接连接到后端，生产环境使用代理
-    const transcriptUrl = process.env.NODE_ENV === 'development' 
-      ? `http://localhost:8000/transcript?webrtc_id=${sessionId}&token=${token}`
-      : `/transcript?webrtc_id=${sessionId}&token=${token}`
+    // 始终使用Next.js代理，无论HTTP还是HTTPS都能正常工作
+    const transcriptUrl = `/transcript?webrtc_id=${sessionId}&token=${token}`
     console.log('🎧 开始监听实时转录:', transcriptUrl)
     
     eventSourceRef.current = new EventSource(transcriptUrl)
