@@ -337,8 +337,13 @@ npm run dev_https
 ### License
 MIT
 
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=weynechen/intrascribe&type=Date)](https://www.star-history.com/#weynechen/intrascribe&Date)
+
 ### TODO
 开发会议助手硬件：
 
 - 增加麦克风阵列硬件接入
 - 增加AI对话功能，使用RAG实时回答记录相关的问题
+
