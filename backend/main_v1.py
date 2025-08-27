@@ -8,22 +8,12 @@ import os
 from pathlib import Path
 from datetime import datetime
 from typing import Tuple
-import numpy as np
 import json
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, StreamingResponse
-from fastrtc import (
-    AdditionalOutputs,
-    ReplyOnPause,
-    Stream,
-    get_current_context,
-    audio_to_bytes,
-    get_twilio_turn_credentials,
-    AlgoOptions
-)
+from fastapi.responses import HTMLResponse
 import gradio as gr
 
 # 导入新架构的模块
@@ -91,13 +81,14 @@ app.add_middleware(
 # 挂载API路由
 app.include_router(api_router, prefix=f"/api/{settings.api_version}")
 
+# 挂载LiveKit连接详情API
+from app.livekit_connection import connection_router
+app.include_router(connection_router, prefix=f"/api/{settings.api_version}")
+
 # 根目录挂载测试页面
 @app.get("/")
 def index():
-    # rtc_config = get_twilio_turn_credentials() if get_space() else None
-    rtc_config = None
-    html_content = (cur_dir.parent / "index.html").read_text()
-    html_content = html_content.replace("__RTC_CONFIGURATION__", json.dumps(rtc_config))
+    html_content = "<html><body><h1>Intrascribe Backend</h1><p>LiveKit Agent is running</p></body></html>"
     return HTMLResponse(content=html_content)
 
 # =============== 异常处理器 ===============
@@ -168,118 +159,10 @@ async def external_service_error_handler(request: Request, exc: ExternalServiceE
 logger.info("✅ FastAPI应用初始化完成")
 
 
-# =============== FastRTC 集成 ===============
-
-async def transcribe(audio: Tuple[int, np.ndarray]):
-    """
-    使用本地 ASR 模型进行语音转录 - 集成到新架构
-    """
-    try:
-        sample_rate, audio_data = audio
-        current_time = datetime.now()
-        context = get_current_context()
-        session_id = context.webrtc_id
-       
-        # 添加音频数据格式调试
-        logger.info(f"🎵 接收音频数据: 采样率={sample_rate}, 数据类型={type(audio_data)}, 形状={getattr(audio_data, 'shape', 'N/A')}")
-        logger.info(f"📋 会话ID: {session_id}")
-        
-        # 使用新架构的音频转录服务，传递会话ID
-        transcription_result = await audio_transcription_service.transcribe_audio(audio, session_id)
-        
-        if transcription_result and transcription_result.get('text'):
-            logger.info(f"🎙️ 转录完成: {transcription_result}")
-            
-            # 直接返回结构化的转录数据，用JSON格式传递
-            yield AdditionalOutputs(json.dumps(transcription_result, ensure_ascii=False))
-        else:
-            # 如果转录失败或为空，返回空内容
-            yield AdditionalOutputs("")
-        
-    except Exception as e:
-        logger.error(f"转录过程中发生错误: {e}")
-        # 构造错误消息的结构化格式
-        error_result = {
-            "index": 0,
-            "speaker": "system",
-            "timestamp": "[00:00:00:000,00:00:00:000]",
-            "text": f"转录错误: {str(e)}",
-            "is_final": True
-        }
-        yield AdditionalOutputs(json.dumps(error_result, ensure_ascii=False))
-
-
-# 创建FastRTC Stream
-stream = Stream(
-    ReplyOnPause(transcribe,
-                 input_sample_rate= 16000,
-                 output_sample_rate = 16000,
-                 algo_options=AlgoOptions(
-                     audio_chunk_duration=1.0,  # 将音频块持续时间增加到1秒
-                     started_talking_threshold=0.2,  # 开始说话的阈值
-                     speech_threshold=0.1,  # 暂停检测的阈值
-                 )
-                 ),
-    modality="audio",
-    mode="send",
-    additional_inputs=None,
-    additional_outputs_handler=lambda a, b: b,
-    # rtc_configuration=get_twilio_turn_credentials() if get_space() else None,
-    concurrency_limit=100, 
-    # time_limit=90 if get_space() else None,
-)
-
-# 挂载FastRTC到FastAPI
-stream.mount(app)
-
-logger.info("✅ FastRTC集成完成")
-
-# =============== FastRTC SSE端点 ===============
-from pydantic import BaseModel
-
-class SendInput(BaseModel):
-    webrtc_id: str
-    transcript: str
-
-@app.post("/send_input")
-def send_input(body: SendInput):
-    """向FastRTC流发送输入"""
-    stream.set_input(body.webrtc_id, body.transcript)
-    return {"success": True}
-
-@app.get("/transcript")
-def transcript_endpoint(webrtc_id: str):
-    """实时转录SSE端点"""
-    async def output_stream():
-        async for output in stream.output_stream(webrtc_id):
-            # 现在output.args[0]是JSON格式的转录数据
-            transcript_json = output.args[0]
-            
-            # 只有当转录数据非空时才发送
-            if transcript_json and transcript_json.strip():
-                try:
-                    # 尝试解析JSON数据
-                    transcript_event = json.loads(transcript_json)
-                    
-                    # 验证数据格式是否符合设计文档要求
-                    if (isinstance(transcript_event, dict) and 
-                        transcript_event.get('text') and
-                        transcript_event.get('index') is not None and
-                        transcript_event.get('speaker') and
-                        transcript_event.get('timestamp') and
-                        transcript_event.get('timestamp').startswith('[') and
-                        transcript_event.get('timestamp').endswith(']')):
-                        
-                        yield f"event: output\ndata: {json.dumps(transcript_event, ensure_ascii=False)}\n\n"
-                    else:
-                        logger.warning(f"收到不符合格式要求的转录数据: {transcript_event}")
-                        
-                except json.JSONDecodeError as e:
-                    logger.error(f"解析转录JSON数据失败: {e}, 原始数据: {transcript_json}")
-                    # 不再提供fallback处理，严格要求符合设计文档格式
-                    logger.error("转录数据格式不正确，已跳过该数据")
-
-    return StreamingResponse(output_stream(), media_type="text/event-stream")
+# =============== LiveKit Agent 集成 ===============
+# LiveKit Agent 在单独的进程中运行
+# 所有实时转录功能现在通过 LiveKit 处理
+logger.info("✅ LiveKit Agent 集成完成 - 请确保 LiveKit Agent 进程已启动")
 
 
 

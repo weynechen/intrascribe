@@ -22,7 +22,7 @@ class SessionRepository:
         self.client = supabase_client
     
     async def create_session(self, user_id: str, title: str, language: str = "zh-CN", 
-                           stt_model: str = "whisper") -> Session:
+                           stt_model: str = "whisper", session_id: Optional[str] = None) -> Session:
         """创建新会话"""
         try:
             client = self.client.get_service_client()
@@ -37,6 +37,10 @@ class SessionRepository:
                     "stt_model": stt_model
                 }
             }
+            
+            # 如果提供了自定义session_id，则使用它
+            if session_id:
+                session_data["id"] = session_id
             
             result = client.table('recording_sessions').insert(session_data).execute()
             

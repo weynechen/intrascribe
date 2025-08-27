@@ -39,9 +39,15 @@ export function Header({
   // 使用useRef来跟踪前一个录音状态
   const wasRecordingRef = useRef(isRecording)
 
-  // 检查会话是否有音频文件
+  // 检查会话是否有音频文件 (暂时禁用LiveKit房间的音频检查)
   const checkSessionAudio = useCallback(async (sessionId: string) => {
     try {
+      // 如果是LiveKit房间名，跳过音频文件检查
+      if (sessionId.startsWith('intrascribe_room_')) {
+        console.log('⚠️ LiveKit房间跳过音频文件检查:', sessionId)
+        return
+      }
+
       // 使用useAuth中的session获取token
       const token = session?.access_token
 

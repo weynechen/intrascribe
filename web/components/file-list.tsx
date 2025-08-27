@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Mic, Calendar, Clock, X, FileText } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { Recorder } from '@/components/recorder'
+import { DirectLiveKitRecorder } from '@/components/direct-livekit-recorder'
+import '@livekit/components-styles'
 import { TranscriptEvent, supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { toast } from 'sonner'
@@ -198,7 +199,7 @@ export function FileList({
       {showRecorder && (
         <div className="p-4 border-b border-gray-200 bg-gray-50">
           <div className="text-center">
-            <Recorder
+            <DirectLiveKitRecorder
               onTranscript={onTranscript || (() => {})}
               onRecordingStateChange={handleRecordingStateChange}
               onSessionCreated={onSessionCreated}

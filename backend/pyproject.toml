@@ -21,7 +21,13 @@ dependencies = [
 
     "librosa",
     "PyYAML",
-    "fastrtc[stt,vad]>=0.0.25",
     "funasr>=1.2.6",
     "pyannote-audio>=3.3.2",
+    
+    # LiveKit Agent dependencies
+    "livekit-agents",
+    "livekit-plugins-silero", 
+    "livekit-plugins-openai",
+    "livekit-api",
+    "livekit-protocol",  # LiveKit Server API SDK
 ]

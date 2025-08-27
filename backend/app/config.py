@@ -30,6 +30,14 @@ class STTConfig:
         self.delete_audio_file = delete_audio_file
 
 
+class LiveKitConfig:
+    """LiveKit配置"""
+    def __init__(self, url: str, api_key: str, api_secret: str):
+        self.url = url
+        self.api_key = api_key
+        self.api_secret = api_secret
+
+
 class ApplicationConfig(BaseSettings):
     """主应用配置"""
     # 基础配置
@@ -50,6 +58,11 @@ class ApplicationConfig(BaseSettings):
     # 说话人分离配置
     huggingface_token: str = Field(default="", env="HUGGINGFACE_TOKEN")
     pyannote_model: str = Field(default="pyannote/speaker-diarization-3.1", env="PYANNOTE_MODEL")
+    
+    # LiveKit 配置
+    livekit_url: str = Field(default="ws://localhost:7880", env="LIVEKIT_URL")
+    livekit_api_key: str = Field(default="devkey", env="LIVEKIT_API_KEY") 
+    livekit_api_secret: str = Field(default="secret", env="LIVEKIT_API_SECRET")
     
     # AI总结配置（从yaml文件加载）
     ai_summary_config: Dict[str, Any] = {}
@@ -75,6 +88,15 @@ class ApplicationConfig(BaseSettings):
             model_dir=self.stt_model_dir,
             output_dir=self.stt_output_dir,
             delete_audio_file=self.stt_delete_audio_file
+        )
+    
+    @property
+    def livekit(self) -> LiveKitConfig:
+        """获取LiveKit配置对象"""
+        return LiveKitConfig(
+            url=self.livekit_url,
+            api_key=self.livekit_api_key,
+            api_secret=self.livekit_api_secret
         )
     
     def __init__(self, **kwargs):
