@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase, RecordingSessionWithRelations, APIClient, subscriptionManager } from '@/lib/supabase'
 import { useAuth } from './useAuth'
 import { toast } from 'sonner'
+import { isSyncResponse, isAsyncResponse } from '@/lib/api-types'
 
 export function useRecordingSessions() {
   const { user, session } = useAuth()
@@ -519,8 +520,11 @@ export function useRecordingSessions() {
       console.log('🚀 创建新的录音会话:', { title, language })
       
       // 第一步：调用后端API创建会话（处理业务逻辑、缓存管理等）
-      const sessionData = await apiClient.createSession(title, language)
-      console.log('✅ 后端会话创建成功:', sessionData)
+      const response = await apiClient.createSession(title, language)
+      console.log('✅ 后端会话创建成功:', response)
+      
+      // 适配新的响应格式
+      const sessionData = response.data || response // 兼容新旧格式
       
       // 第二步：使用前端Supabase客户端触发一个UPDATE操作，确保实时订阅能接收到事件
       // 这个操作会触发UPDATE事件，从而让前端实时订阅感知到新会话
@@ -719,8 +723,11 @@ export function useRecordingSessions() {
       console.log('🗑️ 删除录音会话:', sessionId)
       
       // 调用后端API删除会话（包括音频文件）
-      const result = await apiClient.deleteSession(sessionId)
-      console.log('✅ 后端删除会话成功:', result)
+      const response = await apiClient.deleteSession(sessionId)
+      console.log('✅ 后端删除会话成功:', response)
+      
+      // 适配新的响应格式
+      const result = response.data || response // 兼容新旧格式
       
       // 立即更新本地状态
       setSessions(prev => prev.filter(session => session.id !== sessionId))
@@ -744,12 +751,12 @@ export function useRecordingSessions() {
     }
   }
 
-  // 生成AI总结
+  // 生成AI总结 - V2异步API
   const generateSummary = async (sessionId: string, transcription: string, templateId?: string) => {
     if (!apiClient) return null
 
     try {
-      console.log('🤖 生成AI总结调试:', {
+      console.log('🤖 生成AI总结V2调试:', {
         sessionId, 
         templateId,
         templateIdType: typeof templateId,
@@ -757,10 +764,10 @@ export function useRecordingSessions() {
         templateIdValue: templateId
       })
       
-      // 调用新的会话级AI总结API - 强制重新生成
+      // 调用V2异步API - 使用会话级总结API
       const result = await apiClient.generateSessionSummary(sessionId, true, templateId)
       
-      console.log('✅ AI总结生成并保存完成:', result)
+      console.log('✅ V2 AI总结生成并保存完成:', result)
       
       // 刷新会话数据以获取最新的总结
       const { data: { user: currentUser } } = await supabase.auth.getUser()
@@ -768,13 +775,12 @@ export function useRecordingSessions() {
         await fetchSessions(currentUser.id)
       }
       
-      // toast.success('AI总结生成并保存完成')
       return {
         summary: result.summary,
         metadata: result.metadata
       }
     } catch (error) {
-      console.error('生成AI总结失败:', error)
+      console.error('生成V2 AI总结失败:', error)
       toast.error('生成AI总结失败')
       return null
     }

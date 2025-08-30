@@ -1,4 +1,12 @@
 import { createClient } from '@supabase/supabase-js'
+import {
+  SyncResponse, AsyncResponse, TaskStatusResponse,
+  SessionCreateResponse, SessionDeleteResponse, SessionFinalizeResponse,
+  AsyncAIResponse, AsyncTranscriptionResponse,
+  AISummaryResponse, AISummaryData,
+  isAsyncResponse, isSyncResponse, isTaskStatusResponse,
+  getTaskStatus
+} from './api-types'
 
 // 始终使用Next.js代理，无论HTTP还是HTTPS都能正常工作
 const supabaseUrl = typeof window !== 'undefined' 
@@ -618,7 +626,7 @@ export class APIClient {
 
   // 会话管理
   async createSession(title: string, language: string = 'zh-CN', sttModel: string = 'whisper'): Promise<SessionCreateResponse> {
-    return this.request<SessionCreateResponse>('/sessions', {
+    const response = await this.request<SessionCreateResponse>('/sessions', {
       method: 'POST',
       body: JSON.stringify({
         title,
@@ -626,34 +634,202 @@ export class APIClient {
         stt_model: sttModel
       })
     })
+    
+    // 检查响应格式并适配
+    if (isSyncResponse(response)) {
+      // 新的统一响应格式
+      return response
+    } else {
+      // 兼容旧格式，包装成新格式
+      return {
+        success: true,
+        message: "会话创建成功",
+        timestamp: new Date().toISOString(),
+        data: response as any
+      }
+    }
   }
 
   async finalizeSession(sessionId: string): Promise<SessionFinalizeResponse> {
-    return this.request<SessionFinalizeResponse>(`/sessions/${sessionId}/finalize`, {
-      method: 'POST'
+    // 使用V2异步API - 返回task_id
+    const baseURL = this.baseURL.replace('/v1', '') // 移除v1，直接访问v2
+    
+    const taskResponse = await fetch(`${baseURL}/v2/sessions/${sessionId}/finalize`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.getAuthToken()}`
+      }
     })
+
+    if (!taskResponse.ok) {
+      throw new Error(`会话结束失败: ${taskResponse.status}`)
+    }
+
+    const taskData = await taskResponse.json()
+    console.log('✅ V2会话结束任务已提交:', taskData.task_id)
+
+    // 轮询任务状态直到完成
+    const result = await this.pollV2TaskStatus(taskData.task_id)
+    console.log('✅ V2会话结束完成')
+
+    // 包装返回格式以兼容现有接口
+    return {
+      message: "Session finalized successfully.",
+      session_id: sessionId,
+      status: "completed",
+      final_data: result
+    }
   }
 
-  async deleteSession(sessionId: string): Promise<{ message: string; session_id: string; deleted: boolean }> {
-    return this.request<{ message: string; session_id: string; deleted: boolean }>(`/sessions/${sessionId}`, {
+  async deleteSession(sessionId: string): Promise<SessionDeleteResponse> {
+    const response = await this.request<SessionDeleteResponse>(`/sessions/${sessionId}`, {
       method: 'DELETE'
     })
+    
+    // 检查响应格式并适配
+    if (isSyncResponse(response)) {
+      // 新的统一响应格式
+      return response
+    } else {
+      // 兼容旧格式，包装成新格式
+      return {
+        success: true,
+        message: "会话删除成功",
+        timestamp: new Date().toISOString(),
+        data: {
+          session_id: sessionId,
+          deleted: true
+        }
+      }
+    }
   }
 
   async getSession(sessionId: string): Promise<RecordingSession> {
     return this.request<RecordingSession>(`/sessions/${sessionId}`)
   }
 
-  // AI 服务
-  async generateSummary(transcription: string): Promise<AISummaryResponse> {
-    return this.request<AISummaryResponse>('/summarize', {
+  // 响应格式检测和处理
+  private isAsyncResponse(response: any): boolean {
+    return response && typeof response === 'object' && 
+           'task_id' in response && 'poll_url' in response
+  }
+  
+  private isSyncResponse(response: any): boolean {
+    return response && typeof response === 'object' && 
+           'data' in response && !('task_id' in response)
+  }
+
+  // AI 服务 - 统一响应处理
+  async generateSummary(transcription: string, sessionId: string, templateId?: string): Promise<AISummaryResponse> {
+    // 直接调用内部的summarize API，它会处理V2异步任务
+    const response = await this.request<any>('/summarize', {
       method: 'POST',
-      body: JSON.stringify({ transcription })
+      body: JSON.stringify({ 
+        transcription,
+        sessionId,
+        templateId
+      })
     })
+    
+    // 根据响应格式判断是否需要轮询
+    if (this.isAsyncResponse(response)) {
+      console.log('🔄 检测到异步响应，开始轮询:', response.task_id)
+      const result = await this.pollV2TaskStatus(response.task_id)
+      return {
+        summary: result.summary,
+        key_points: result.key_points || [],
+        metadata: result.metadata || {}
+      }
+    } else if (this.isSyncResponse(response)) {
+      console.log('✅ 检测到同步响应')
+      return response.data
+    } else {
+      // 兼容旧格式
+      return response
+    }
+  }
+
+  // 轮询V2任务状态的辅助方法
+  private async pollV2TaskStatus(taskId: string, maxAttempts: number = 60): Promise<any> {
+    const baseURL = this.baseURL.replace('/v1', '') // 移除v1，直接访问v2
+    
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        const response = await fetch(`${baseURL}/v2/tasks/${taskId}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.getAuthToken()}`
+          }
+        })
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`)
+        }
+
+        const taskStatusResponse: TaskStatusResponse = await response.json()
+        console.log(`🔄 V2任务状态轮询 ${attempt + 1}/${maxAttempts}:`, taskStatusResponse.status)
+
+        // 使用新的类型守卫和工具函数
+        if (isTaskStatusResponse(taskStatusResponse)) {
+          const status = getTaskStatus(taskStatusResponse)
+          
+          // 任务完成
+          if (status.isCompleted && taskStatusResponse.result) {
+            console.log('✅ V2任务完成，返回结果')
+            return taskStatusResponse.result
+          }
+
+          // 任务失败
+          if (status.isFailed) {
+            console.error('❌ V2任务失败:', taskStatusResponse.error)
+            throw new Error(taskStatusResponse.error || '任务执行失败')
+          }
+
+          // 任务被取消
+          if (status.isCancelled) {
+            console.warn('⚠️ V2任务被取消')
+            throw new Error('任务被取消')
+          }
+
+          // 任务仍在进行中
+          if (status.isPending) {
+            console.log('⏳ V2任务进行中:', taskStatusResponse.progress)
+            await new Promise(resolve => setTimeout(resolve, 3000))
+            continue
+          }
+        } else {
+          // 兼容旧的响应格式
+          if (taskStatusResponse.status === 'success' && (taskStatusResponse as any).result) {
+            return (taskStatusResponse as any).result
+          }
+          
+          if (taskStatusResponse.status === 'failure') {
+            throw new Error(taskStatusResponse.error || '任务执行失败')
+          }
+        }
+        
+        console.warn('⚠️ 未知任务状态:', taskStatusResponse.status)
+        
+      } catch (error) {
+        console.error(`❌ V2任务状态查询失败 (第${attempt + 1}次):`, error)
+        
+        // 最后几次尝试时抛出错误
+        if (attempt >= maxAttempts - 3) {
+          throw error
+        }
+        
+        // 等待后重试
+        await new Promise(resolve => setTimeout(resolve, 3000))
+      }
+    }
+
+    throw new Error(`V2任务轮询超时 (${maxAttempts} 次尝试)`)
   }
 
   async generateSessionSummary(sessionId: string, force: boolean = false, templateId?: string): Promise<{ summary: string; metadata: Record<string, unknown> }> {
-    console.log('🌐 APIClient.generateSessionSummary调试:', {
+    console.log('🌐 APIClient.generateSessionSummary V2调试:', {
       sessionId,
       force,
       templateId,
@@ -661,19 +837,48 @@ export class APIClient {
       isTemplateIdString: typeof templateId === 'string'
     })
     
-    const params = new URLSearchParams()
-    if (force) params.append('force', 'true')
-    if (templateId) params.append('template_id', templateId)
-    
-    const queryString = params.toString()
-    console.log('🌐 生成的URL查询字符串:', queryString)
-    
-    return this.request<{ summary: string; metadata: Record<string, unknown> }>(`/sessions/${sessionId}/summarize${queryString ? `?${queryString}` : ''}`, {
-      method: 'POST'
-    })
+    try {
+      const baseURL = this.baseURL.replace('/v1', '') // 移除v1，直接访问v2
+      
+      // 先获取转录内容
+      const session = await this.getSession(sessionId)
+      
+      // 提交V2异步任务
+      const taskResponse = await fetch(`${baseURL}/v2/sessions/${sessionId}/ai-summary`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.getAuthToken()}`
+        },
+        body: JSON.stringify({
+          transcription_text: session.transcriptions?.[0]?.content || '',
+          template_id: templateId || null
+        })
+      })
+
+      if (!taskResponse.ok) {
+        throw new Error(`提交AI总结任务失败: ${taskResponse.status}`)
+      }
+
+      const taskData = await taskResponse.json()
+      console.log('✅ V2 AI总结任务已提交:', taskData.task_id)
+
+      // 轮询任务状态
+      const result = await this.pollV2TaskStatus(taskData.task_id)
+      console.log('✅ V2 AI总结生成完成')
+
+      return {
+        summary: result.summary,
+        metadata: { generated_by: 'v2_async_task' }
+      }
+    } catch (error) {
+      console.error('V2 AI总结生成失败:', error)
+      throw error
+    }
   }
 
   async generateTitle(transcription: string, summary?: string): Promise<AITitleResponse> {
+    // 调用本地generate-title API，它现在使用本地算法生成标题
     return this.request<AITitleResponse>('/generate-title', {
       method: 'POST',
       body: JSON.stringify({
@@ -731,9 +936,58 @@ export class APIClient {
   }
 
   // 重新转录会话
-  async retranscribeSession(sessionId: string): Promise<{ success: boolean; message: string; session_id: string; status: string }> {
-    return this.request<{ success: boolean; message: string; session_id: string; status: string }>(`/sessions/${sessionId}/retranscribe`, {
-      method: 'POST'
-    })
+  async retranscribeSession(sessionId: string): Promise<{ success: boolean; message: string; session_id: string; status: string; task_id?: string }> {
+    try {
+      // 使用V2异步API - 返回task_id
+      const baseURL = this.baseURL.replace('/v1', '') // 移除v1，直接访问v2
+      
+      const taskResponse = await fetch(`${baseURL}/v2/sessions/${sessionId}/retranscribe`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.getAuthToken()}`
+        }
+      })
+
+      if (!taskResponse.ok) {
+        throw new Error(`重新转录失败: ${taskResponse.status}`)
+      }
+
+      const taskData = await taskResponse.json()
+      console.log('✅ V2重新转录任务已提交:', taskData.task_id)
+
+      // 启动异步轮询，但不等待完成就返回
+      this.pollV2TaskStatus(taskData.task_id).then(result => {
+        console.log('✅ V2重新转录完成:', result)
+      }).catch(error => {
+        console.error('❌ V2重新转录失败:', error)
+      })
+
+      // 立即返回任务信息
+      return {
+        success: true,
+        message: "重新转录任务已提交，正在后台处理",
+        session_id: sessionId,
+        status: "processing",
+        task_id: taskData.task_id
+      }
+      
+    } catch (error) {
+      console.error('重新转录API调用失败，回退到V1:', error)
+      
+      // 回退到V1同步API（如果V2不可用）
+      try {
+        return await this.request<{ success: boolean; message: string; session_id: string; status: string }>(`/sessions/${sessionId}/retranscribe`, {
+          method: 'POST'
+        })
+      } catch (v1Error) {
+        return {
+          success: false,
+          message: "重新转录功能暂时不可用",
+          session_id: sessionId,
+          status: "failed"
+        }
+      }
+    }
   }
 } 

@@ -1,7 +1,52 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-// 后端服务的基础URL
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000'
+// 标题生成功能已集成到V2会话处理流程中
+// 此端点现在仅提供基于内容的智能标题生成
+
+function generateSmartTitle(transcription: string, summary?: string): string {
+  try {
+    // 使用总结内容（如果有）或转录内容的前50个字符生成标题
+    const content = summary || transcription
+    
+    if (!content || content.length < 10) {
+      return `会议记录 ${new Date().toLocaleString('zh-CN', {
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      })}`
+    }
+
+    // 提取关键词生成标题
+    const keywords = content
+      .replace(/[^\u4e00-\u9fa5\w\s]/g, ' ') // 保留中文、英文和数字
+      .split(/\s+/)
+      .filter(word => word.length > 1)
+      .slice(0, 8) // 取前8个词
+
+    if (keywords.length > 0) {
+      const title = keywords.slice(0, 4).join(' ')
+      return title.length > 20 ? title.substring(0, 20) + '...' : title
+    }
+
+    // 如果没有找到关键词，使用时间戳标题
+    return `会议记录 ${new Date().toLocaleString('zh-CN', {
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    })}`
+
+  } catch (error) {
+    console.error('生成智能标题失败:', error)
+    return `会议记录 ${new Date().toLocaleString('zh-CN', {
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    })}`
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,37 +63,23 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log('🔄 调用后端API生成标题...')
-    // 调用后端的真实API接口
-    const response = await fetch(`${BACKEND_URL}/api/generate-title`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ 
-        transcription,
-        summary: summary || null
-      }), // 使用transcription字段，summary是可选的
+    console.log('🔄 生成智能标题...')
+    const title = generateSmartTitle(transcription, summary)
+    console.log('✅ 标题生成成功:', title)
+
+    return NextResponse.json({
+      title,
+      metadata: {
+        generated_by: 'local_algorithm',
+        fallback_used: false,
+        timestamp: Date.now()
+      }
     })
-
-    console.log('📡 后端API响应状态:', response.status)
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.log('❌ 后端API调用失败:', errorText)
-      throw new Error(`后端API调用失败: ${response.status} ${response.statusText}`)
-    }
-
-    const data = await response.json()
-    console.log('✅ 标题生成成功:', data.title)
-
-    // 返回与后端一致的响应格式
-    return NextResponse.json(data)
 
   } catch (error) {
     console.error('标题生成失败:', error)
     
-    // 如果后端不可用，返回回退标题
+    // 返回回退标题
     const fallbackTitle = `会议记录 ${new Date().toLocaleString('zh-CN', {
       month: '2-digit',
       day: '2-digit',
@@ -66,8 +97,7 @@ export async function POST(request: NextRequest) {
           fallback_used: true,
           timestamp: Date.now()
         }
-      },
-      { status: 500 }
+      }
     )
   }
 } 

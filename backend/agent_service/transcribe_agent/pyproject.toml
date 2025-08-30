@@ -1,0 +1,17 @@
+[project]
+name = "transcribe-agent"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.25.2",
+    "librosa>=0.10.0",
+    "livekit[plugins]>=0.10.1",
+    "livekit-agents[cartesia,deepgram,openai,silero,turn-detector]~=1.2",
+    "numpy>=1.24.3",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "python-dotenv>=1.0.0",
+    "pyyaml>=6.0.1",
+    "redis>=2.0.1",
+    "livekit-plugins-noise-cancellation~=0.2",
+]

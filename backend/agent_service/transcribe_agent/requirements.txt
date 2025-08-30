@@ -1,0 +1,19 @@
+# Lightweight LiveKit Agent Dependencies
+livekit>=0.10.1
+livekit-agents>=0.8.2
+
+# HTTP client for microservices
+httpx>=0.25.2
+
+# Redis for real-time data
+redis>=2.0.1
+
+# Audio processing (minimal)
+numpy>=1.24.3
+librosa>=0.10.0
+librosa>=0.10.0
+
+# Utilities
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+pyyaml>=6.0.1
