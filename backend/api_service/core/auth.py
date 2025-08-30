@@ -204,6 +204,72 @@ async def get_optional_current_user(
         return None
 
 
+async def get_current_user_or_service(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+) -> Optional[UserData]:
+    """
+    Get current user from JWT token or authenticate as service using service token.
+    
+    Args:
+        credentials: HTTP authorization credentials
+    
+    Returns:
+        UserData if user authenticated, None if service authenticated
+    
+    Raises:
+        HTTPException: If authentication fails
+    """
+    try:
+        if not credentials:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authorization header missing"
+            )
+        
+        token = credentials.credentials
+        
+        # Check if it's a service token
+        service_token = os.getenv("SERVICE_TOKEN")
+        if service_token and token == service_token:
+            logger.debug("Authenticated as internal service")
+            return None  # Service authentication, no user
+        
+        # Try user authentication
+        user_id = auth_manager.get_user_id_from_token(f"Bearer {token}")
+        
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token"
+            )
+        
+        # Get user data
+        user = auth_manager.get_user_by_id(user_id)
+        
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User not found"
+            )
+        
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User account is inactive"
+            )
+        
+        return user
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Authentication failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication failed"
+        )
+
+
 def verify_session_ownership(session_id: str, current_user: UserData = Depends(get_current_user)) -> str:
     """
     Verify session ownership dependency.
@@ -220,6 +286,48 @@ def verify_session_ownership(session_id: str, current_user: UserData = Depends(g
     """
     try:
         if not auth_manager.verify_session_ownership(session_id, current_user.id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied to this session"
+            )
+        
+        return session_id
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Session ownership verification failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Ownership verification failed"
+        )
+
+
+def verify_session_ownership_or_service(
+    session_id: str, 
+    current_user_or_service: Optional[UserData] = Depends(get_current_user_or_service)
+) -> str:
+    """
+    Verify session ownership or allow if service authenticated.
+    
+    Args:
+        session_id: Session ID to verify
+        current_user_or_service: Current authenticated user or None if service
+    
+    Returns:
+        Session ID if ownership is verified or service authenticated
+    
+    Raises:
+        HTTPException: If ownership verification fails
+    """
+    try:
+        # If service authenticated, allow access
+        if current_user_or_service is None:
+            logger.debug(f"Service access granted for session: {session_id}")
+            return session_id
+        
+        # Otherwise verify user ownership
+        if not auth_manager.verify_session_ownership(session_id, current_user_or_service.id):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Access denied to this session"

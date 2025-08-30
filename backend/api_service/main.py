@@ -195,6 +195,8 @@ async def service_info() -> Dict[str, Any]:
         "endpoints": {
             "health": "/health",
             "sessions": "/api/v1/sessions",
+            "sessions_v2": "/api/v2/sessions",
+            "tasks_v2": "/api/v2/tasks", 
             "users": "/api/v1/users",
             "templates": "/api/v1/templates", 
             "transcriptions": "/api/v1/transcriptions",
@@ -212,9 +214,11 @@ async def service_info() -> Dict[str, Any]:
 
 
 # Include routers
-from routers import sessions, users, templates, transcriptions, ai_services, livekit, audio, realtime
+from routers import sessions, sessions_v2, tasks_v2, users, templates, transcriptions, ai_services, livekit, audio, realtime
 
 app.include_router(sessions.router, prefix="/api/v1")
+app.include_router(sessions_v2.router, prefix="/api")  # V2 routes
+app.include_router(tasks_v2.router, prefix="/api")  # V2 task routes
 app.include_router(users.router, prefix="/api/v1") 
 app.include_router(templates.router, prefix="/api/v1")
 app.include_router(transcriptions.router, prefix="/api/v1")

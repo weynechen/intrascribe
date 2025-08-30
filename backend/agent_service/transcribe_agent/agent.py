@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+import httpx
 import numpy as np
 from dotenv import load_dotenv
 
@@ -164,6 +165,8 @@ class Transcriber(Agent):
     def __init__(self, session_id: str, room: rtc.Room):
         self.session_id = session_id
         self._room = room  # Save room reference
+        self._api_base_url = os.getenv("API_SERVICE_URL", "http://localhost:8000")
+        self._http_client = httpx.AsyncClient(timeout=10.0)
         super().__init__(
             instructions="Transcribe user speech to text",
             stt=MicroserviceSTT(session_id),
@@ -181,7 +184,7 @@ class Transcriber(Agent):
         raise StopResponse()
     
     async def _send_transcription_to_frontend(self, text: str):
-        """Send transcription data to frontend"""
+        """Send transcription data to frontend and save to Redis"""
         try:
             transcription_data = {
                 "index": len(text) // 10,
@@ -191,15 +194,59 @@ class Transcriber(Agent):
                 "is_final": True
             }
             
+            # Send to frontend via LiveKit
             await self._room.local_participant.publish_data(
                 payload=json.dumps(transcription_data, ensure_ascii=False).encode('utf-8'),
                 topic="transcription"
             )
             
-            logger.info(f"Transcription data sent to frontend: {text}")
+            # Save to Redis via API service (for persistence)
+            await self._save_transcription_to_redis(transcription_data)
+            
+            logger.info(f"Transcription data sent to frontend and saved to Redis: {text}")
             
         except Exception as e:
             logger.error(f"Failed to send transcription data: {e}")
+    
+    async def _save_transcription_to_redis(self, transcription_data: dict):
+        """Save transcription data to Redis via API service"""
+        try:
+            # Get service token for internal API calls
+            service_token = os.getenv("SERVICE_TOKEN")
+            if not service_token:
+                logger.warning("No SERVICE_TOKEN found, skipping Redis save")
+                return
+            
+            # Prepare segment data for Redis storage
+            segment_data = {
+                "text": transcription_data["text"],
+                "speaker": transcription_data["speaker"],
+                "timestamp": transcription_data["timestamp"],
+                "index": transcription_data["index"],
+                "is_final": transcription_data["is_final"]
+            }
+            
+            # Call API service to store in Redis
+            response = await self._http_client.post(
+                f"{self._api_base_url}/api/v1/realtime/sessions/{self.session_id}/transcription",
+                json=segment_data,
+                headers={"Authorization": f"Bearer {service_token}"}
+            )
+            
+            if response.status_code == 200:
+                logger.debug(f"Transcription segment saved to Redis for session: {self.session_id}")
+            else:
+                logger.warning(f"Failed to save to Redis: {response.status_code} - {response.text}")
+                
+        except Exception as e:
+            logger.error(f"Failed to save transcription to Redis: {e}")
+    
+    async def __aenter__(self):
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Clean up HTTP client on exit"""
+        await self._http_client.aclose()
 
 
 def extract_session_id(room_name: str) -> Optional[str]:

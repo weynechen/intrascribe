@@ -16,7 +16,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../..'))
 from shared.logging import ServiceLogger
 from shared.utils import timing_decorator
 
-from core.auth import get_current_user, verify_session_ownership
+from core.auth import get_current_user, verify_session_ownership, verify_session_ownership_or_service, get_current_user_or_service
 from core.redis import redis_manager
 
 logger = ServiceLogger("realtime-api")
@@ -110,16 +110,16 @@ async def get_session_realtime_status(
 @timing_decorator
 async def store_transcription_segment(
     segment_data: Dict[str, Any],
-    session_id: str = Depends(verify_session_ownership),
-    current_user = Depends(get_current_user)
+    session_id: str = Depends(verify_session_ownership_or_service),
+    current_user_or_service = Depends(get_current_user_or_service)
 ):
     """
     Store real-time transcription segment.
     
     Args:
         segment_data: Transcription segment data
-        session_id: Session ID (verified for ownership)
-        current_user: Current authenticated user
+        session_id: Session ID (verified for ownership or service access)
+        current_user_or_service: Current authenticated user or None if service
     
     Returns:
         Success confirmation

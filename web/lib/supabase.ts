@@ -651,10 +651,10 @@ export class APIClient {
   }
 
   async finalizeSession(sessionId: string): Promise<SessionFinalizeResponse> {
-    // 使用V2异步API - 返回task_id
+    // 使用V2 API - 直接处理同步响应
     const baseURL = this.baseURL.replace('/v1', '') // 移除v1，直接访问v2
     
-    const taskResponse = await fetch(`${baseURL}/v2/sessions/${sessionId}/finalize`, {
+    const response = await fetch(`${baseURL}/v2/sessions/${sessionId}/finalize`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -662,23 +662,34 @@ export class APIClient {
       }
     })
 
-    if (!taskResponse.ok) {
-      throw new Error(`会话结束失败: ${taskResponse.status}`)
+    if (!response.ok) {
+      throw new Error(`会话结束失败: ${response.status}`)
     }
 
-    const taskData = await taskResponse.json()
-    console.log('✅ V2会话结束任务已提交:', taskData.task_id)
+    const data = await response.json()
+    console.log('✅ V2会话结束完成:', data)
 
-    // 轮询任务状态直到完成
-    const result = await this.pollV2TaskStatus(taskData.task_id)
-    console.log('✅ V2会话结束完成')
-
-    // 包装返回格式以兼容现有接口
-    return {
-      message: "Session finalized successfully.",
-      session_id: sessionId,
-      status: "completed",
-      final_data: result
+    // 检查是否是异步任务响应
+    if (data.task_id && data.status === "started") {
+      // 异步任务，需要轮询
+      const result = await this.pollV2TaskStatus(data.task_id)
+      return {
+        message: "Session finalized successfully.",
+        session_id: sessionId,
+        status: "completed",
+        final_data: result
+      }
+    } else {
+      // 同步响应，直接返回
+      return {
+        message: data.message || "Session finalized successfully.",
+        session_id: sessionId,
+        status: "completed",
+        final_data: data.result || {
+          total_duration_seconds: 0,
+          transcription_saved: true
+        }
+      }
     }
   }
 
