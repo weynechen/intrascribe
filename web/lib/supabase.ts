@@ -591,11 +591,19 @@ export class APIClient {
     const token = this.getAuthToken()
     const url = `${this.baseURL}${endpoint}`
     
+    // 确保URL是相对路径，强制通过Next.js代理
+    const finalUrl = url.startsWith('/') ? url : `/${url}`
+    
     console.log('🌐 API请求调试:', {
-      url,
+      originalUrl: url,
+      finalUrl,
       method: options.method || 'GET',
       hasToken: !!token,
-      tokenPreview: token ? `${token.substring(0, 20)}...` : null
+      tokenPreview: token ? `${token.substring(0, 20)}...` : null,
+      tokenLength: token ? token.length : 0,
+      endpoint,
+      baseURL: this.baseURL,
+      windowOrigin: typeof window !== 'undefined' ? window.location.origin : 'server-side'
     })
     
     const config: RequestInit = {
@@ -607,10 +615,11 @@ export class APIClient {
       },
     }
 
-    const response = await fetch(url, config)
+    const response = await fetch(finalUrl, config)
     
     console.log('📡 API响应调试:', {
-      url,
+      requestedUrl: finalUrl,
+      responseUrl: response.url,
       status: response.status,
       statusText: response.statusText,
       ok: response.ok
@@ -776,7 +785,7 @@ export class APIClient {
   }
 
   // 轮询V2任务状态的辅助方法
-  private async pollV2TaskStatus(taskId: string, maxAttempts: number = 60): Promise<any> {
+  private async pollV2TaskStatus(taskId: string, maxAttempts: number = 120): Promise<any> {
     const baseURL = this.baseURL.replace('/v1', '') // 移除v1，直接访问v2
     
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -840,7 +849,17 @@ export class APIClient {
       } catch (error) {
         console.error(`❌ V2任务状态查询失败 (第${attempt + 1}次):`, error)
         
-        // 最后几次尝试时抛出错误
+        // 如果是认证错误，立即重试而不是等待太多次
+        if (error instanceof Error && error.message.includes('403')) {
+          console.warn('🔑 检测到认证错误，快速重试...')
+          if (attempt >= 5) { // 认证错误只重试5次
+            throw new Error(`认证失败，请重新登录: ${error.message}`)
+          }
+          await new Promise(resolve => setTimeout(resolve, 1000)) // 认证错误时短暂等待
+          continue
+        }
+        
+        // 其他错误的处理：最后几次尝试时抛出错误
         if (attempt >= maxAttempts - 3) {
           throw error
         }
@@ -864,25 +883,39 @@ export class APIClient {
     
     try {
       const baseURL = this.baseURL.replace('/v1', '') // 移除v1，直接访问v2
+      const token = this.getAuthToken()
       
-      // 先获取转录内容
-      const session = await this.getSession(sessionId)
+      console.log('🔑 认证调试:', {
+        hasToken: !!token,
+        tokenPreview: token ? `${token.substring(0, 20)}...` : null
+      })
       
-      // 提交V2异步任务
+      if (!token) {
+        throw new Error('用户未认证，无法生成AI总结')
+      }
+      
+      // 直接提交V2异步任务，不需要先获取session（避免额外的API调用和认证问题）
       const taskResponse = await fetch(`${baseURL}/v2/sessions/${sessionId}/ai-summary`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.getAuthToken()}`
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          transcription_text: session.transcriptions?.[0]?.content || '',
           template_id: templateId || null
         })
       })
 
+      console.log('📡 AI总结任务提交响应:', {
+        status: taskResponse.status,
+        statusText: taskResponse.statusText,
+        ok: taskResponse.ok
+      })
+
       if (!taskResponse.ok) {
-        throw new Error(`提交AI总结任务失败: ${taskResponse.status}`)
+        const errorData = await taskResponse.json().catch(() => ({}))
+        console.error('❌ 提交AI总结任务失败:', errorData)
+        throw new Error(`提交AI总结任务失败: ${taskResponse.status} - ${errorData.detail || taskResponse.statusText}`)
       }
 
       const taskData = await taskResponse.json()
@@ -937,7 +970,20 @@ export class APIClient {
 
   // 模板管理
   async getTemplates(): Promise<SummaryTemplate[]> {
-    return this.request<SummaryTemplate[]>('/templates')
+    const token = this.getAuthToken()
+    
+    console.log('🔑 模板加载认证调试:', {
+      hasToken: !!token,
+      tokenPreview: token ? `${token.substring(0, 20)}...` : null,
+      tokenLength: token ? token.length : 0,
+      baseURL: this.baseURL
+    })
+    
+    if (!token) {
+      throw new Error('用户未认证，无法加载模板')
+    }
+    
+    return this.request<SummaryTemplate[]>('/templates/')
   }
 
   async createTemplate(template: CreateTemplateRequest): Promise<SummaryTemplate> {
@@ -965,10 +1011,20 @@ export class APIClient {
   }
 
   // 更新会话模板选择
-  async updateSessionTemplate(sessionId: string, templateId: string): Promise<{ message: string; session_id: string; template_id: string }> {
+  async updateSessionTemplate(sessionId: string, templateId: string | null): Promise<{ message: string; session_id: string; template_id: string }> {
+    // 转换空字符串为null，避免后端UUID错误
+    const finalTemplateId = (!templateId || templateId === '' || templateId === 'no-template') ? null : templateId
+    
+    console.log('🔧 updateSessionTemplate调试:', {
+      original: templateId,
+      final: finalTemplateId,
+      originalType: typeof templateId,
+      finalType: typeof finalTemplateId
+    })
+    
     return this.request<{ message: string; session_id: string; template_id: string }>(`/sessions/${sessionId}/template`, {
       method: 'PUT',
-      body: JSON.stringify({ template_id: templateId })
+      body: JSON.stringify({ template_id: finalTemplateId })
     })
   }
 

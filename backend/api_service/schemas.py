@@ -116,7 +116,7 @@ class RenameSpeakerRequest(BaseModel):
 
 class UpdateSessionTemplateRequest(BaseModel):
     """Update session template request"""
-    template_id: str
+    template_id: Optional[str] = None
 
 
 # =============== Template Management ===============

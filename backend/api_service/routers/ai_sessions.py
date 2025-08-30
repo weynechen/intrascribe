@@ -7,8 +7,9 @@ import sys
 import uuid
 import asyncio
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from pydantic import BaseModel
 
 # Add shared components to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '../..'))
@@ -27,6 +28,10 @@ from routers.transcriptions import transcription_repository
 from routers.tasks_v2 import update_task_status
 
 logger = ServiceLogger("ai-sessions-api")
+
+class AISummaryRequest(BaseModel):
+    """AI Summary request model"""
+    template_id: Optional[str] = None
 
 router = APIRouter(prefix="/v2/sessions", tags=["AI Sessions"])
 
@@ -125,7 +130,7 @@ class AISummaryRepository:
 ai_summary_repository = AISummaryRepository()
 
 
-async def _process_ai_summary_task(task_id: str, session_id: str, user_id: str):
+async def _process_ai_summary_task(task_id: str, session_id: str, user_id: str, template_id: str = None):
     """
     Background task to process AI summary generation.
     
@@ -177,14 +182,15 @@ async def _process_ai_summary_task(task_id: str, session_id: str, user_id: str):
         update_task_status(task_id, "started", 
                           progress={"step": "preparing_ai_request", "percentage": 60})
         
-        # Get template content if specified in session
+        # Get template content if specified (priority: parameter > session metadata)
         template_content = None
-        template_id = session.metadata.get("template_id") if session.metadata else None
-        if template_id:
+        effective_template_id = template_id or (session.metadata.get("template_id") if session.metadata else None)
+        if effective_template_id:
             from ..repositories.user_repository import template_repository
-            template = template_repository.get_template_by_id(template_id, user_id)
+            template = template_repository.get_template_by_id(effective_template_id, user_id)
             if template:
                 template_content = template["template_content"]
+                logger.info(f"Using template for AI summary: {effective_template_id}")
         
         # Update progress
         update_task_status(task_id, "started", 
@@ -198,10 +204,16 @@ async def _process_ai_summary_task(task_id: str, session_id: str, user_id: str):
         )
         
         if result["success"]:
-            # Save AI summary to database
+            # Save AI summary to database (use first transcription_id for UUID field)
+            primary_transcription_id = transcription_ids[0] if transcription_ids else None
+            if not primary_transcription_id:
+                update_task_status(task_id, "failed", 
+                                  error="No valid transcription ID found")
+                return
+            
             summary_data = ai_summary_repository.save_ai_summary(
                 session_id=session_id,
-                transcription_id=",".join(transcription_ids),
+                transcription_id=primary_transcription_id,
                 summary=result["summary"],
                 key_points=result.get("key_points", []),
                 action_items=result.get("action_items", []),
@@ -245,6 +257,7 @@ async def _process_ai_summary_task(task_id: str, session_id: str, user_id: str):
 @timing_decorator
 async def generate_session_ai_summary(
     session_id: str,
+    request: AISummaryRequest,
     background_tasks: BackgroundTasks,
     current_user = Depends(get_current_user)
 ):
@@ -291,7 +304,8 @@ async def generate_session_ai_summary(
             _process_ai_summary_task,
             task_id=task_id,
             session_id=session_id,
-            user_id=current_user.id
+            user_id=current_user.id,
+            template_id=request.template_id
         )
         
         logger.info(f"AI summary task submitted: {task_id}")

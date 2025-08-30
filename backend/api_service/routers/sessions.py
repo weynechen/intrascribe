@@ -466,16 +466,19 @@ async def update_session_template(
                 detail="Access denied to this session"
             )
         
-        # Verify template exists and belongs to user
-        from repositories.user_repository import template_repository
-        template = template_repository.get_template_by_id(request.template_id, current_user.id)
-        if not template:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Template not found"
-            )
+        # Verify template exists and belongs to user (only if template_id is provided)
+        template = None
+        if request.template_id:  # Only validate if template_id is not null/empty
+            from repositories.user_repository import template_repository
+            template = template_repository.get_template_by_id(request.template_id, current_user.id)
+            if not template:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Template not found"
+                )
         
-        logger.info(f"Updating template for session {session_id} to template {request.template_id}")
+        template_desc = request.template_id or "无模板"
+        logger.info(f"Updating template for session {session_id} to template {template_desc}")
         
         # Update session template_id in database
         from core.database import db_manager
@@ -505,7 +508,7 @@ async def update_session_template(
                 detail="Failed to retrieve updated session"
             )
         
-        logger.success(f"Session template updated: {session_id} -> template {request.template_id}")
+        logger.success(f"Session template updated: {session_id} -> template {template_desc}")
         
         return SessionResponse(
             id=updated_session.id,

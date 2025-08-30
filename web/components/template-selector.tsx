@@ -31,41 +31,57 @@ export function TemplateSelector({
 
   // 初始化API客户端
   useEffect(() => {
+    console.log('🔑 Template-selector认证状态:', {
+      hasSession: !!session,
+      hasAccessToken: !!session?.access_token,
+      tokenPreview: session?.access_token ? `${session.access_token.substring(0, 20)}...` : null
+    })
+    
     if (session?.access_token) {
       const client = new APIClient('/api/v1', () => session.access_token)
       setApiClient(client)
+    } else {
+      console.warn('⚠️ 无法创建API客户端：缺少认证token')
+      setApiClient(null)
     }
   }, [session?.access_token])
 
   // 加载模板
   const loadTemplates = useCallback(async () => {
-    if (!apiClient) return
+    if (!apiClient) {
+      console.warn('⚠️ API客户端未初始化，跳过模板加载')
+      return
+    }
+    
+    if (!session?.access_token) {
+      console.warn('⚠️ 用户未认证，跳过模板加载')
+      return
+    }
 
     try {
       setLoading(true)
+      console.log('🔄 开始加载模板...')
       const templatesData = await apiClient.getTemplates()
-      setTemplates(templatesData)
       
-      // 如果没有选中模板，自动选择默认模板
-      if (!selectedTemplateId && templatesData.length > 0) {
-        const defaultTemplate = templatesData.find(t => t.is_default)
-        if (defaultTemplate) {
-          console.log('🔍 自动选择默认模板:', {
-            templateId: defaultTemplate.id,
-            templateIdType: typeof defaultTemplate.id,
-            templateName: defaultTemplate.name,
-            fullTemplate: defaultTemplate
-          })
-          onTemplateChange(defaultTemplate.id)
-        }
-      }
+      // 过滤掉默认模板，只显示用户自定义模板
+      const userTemplates = templatesData.filter(template => !template.is_default)
+      setTemplates(userTemplates)
+      
+      console.log('✅ 模板加载成功:', {
+        total: templatesData.length,
+        userTemplates: userTemplates.length,
+        defaultTemplatesFiltered: templatesData.length - userTemplates.length
+      })
+      
+      // 如果没有选中模板且有用户模板，不自动选择任何模板
+      // 用户需要主动选择或使用"不使用模板"选项
     } catch (error) {
       console.error('加载模板失败:', error)
       toast.error('加载模板失败')
     } finally {
       setLoading(false)
     }
-  }, [apiClient, selectedTemplateId, onTemplateChange])
+  }, [apiClient, selectedTemplateId, onTemplateChange, session?.access_token])
 
   useEffect(() => {
     loadTemplates()
@@ -152,14 +168,14 @@ export function TemplateSelector({
 
       <div className="flex space-x-2">
         <Select
-          value={selectedTemplateId || ''}
-          onValueChange={(value) => onTemplateChange(value || undefined)}
+          value={selectedTemplateId || 'no-template'}
+          onValueChange={(value) => onTemplateChange(value === 'no-template' ? undefined : value)}
         >
           <SelectTrigger className="flex-1">
             <SelectValue placeholder="选择总结模板" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">不使用模板</SelectItem>
+            <SelectItem value="no-template">不使用模板</SelectItem>
             {templates.map((template) => (
               <SelectItem key={template.id} value={template.id}>
                 <div className="flex items-center gap-2">
