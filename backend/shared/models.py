@@ -123,6 +123,7 @@ class SessionData:
     status: SessionStatus
     language: str = "zh-CN"
     stt_model: str = "whisper"
+    template_id: Optional[str] = None
     metadata: Dict[str, Any] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None

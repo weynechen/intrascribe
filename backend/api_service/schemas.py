@@ -69,6 +69,7 @@ class SessionResponse(BaseModel):
     title: str
     status: str
     language: str
+    template_id: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     duration_seconds: Optional[float] = None

@@ -18,6 +18,7 @@ from shared.utils import timing_decorator, generate_id
 
 from core.auth import get_current_user, verify_session_ownership
 from repositories.session_repository import session_repository
+from schemas import UpdateSessionTemplateRequest
 
 logger = ServiceLogger("sessions-api")
 
@@ -43,6 +44,7 @@ class SessionResponse(BaseModel):
     title: str
     status: str
     language: str
+    template_id: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
@@ -81,6 +83,7 @@ async def create_session(
             title=session.title,
             status=session.status.value,
             language=session.language,
+            template_id=session.template_id,
             created_at=session.created_at,
             updated_at=session.updated_at
         )
@@ -123,6 +126,7 @@ async def get_session(
             title=session.title,
             status=session.status.value,
             language=session.language,
+            template_id=session.template_id,
             created_at=session.created_at,
             updated_at=session.updated_at
         )
@@ -168,6 +172,7 @@ async def list_sessions(
                 title=session.title,
                 status=session.status.value,
                 language=session.language,
+                template_id=session.template_id,
                 created_at=session.created_at,
                 updated_at=session.updated_at
             )
@@ -421,4 +426,92 @@ async def rename_speaker(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to rename speaker"
+        )
+
+
+@router.put("/{session_id}/template", response_model=SessionResponse)
+@timing_decorator
+async def update_session_template(
+    request: UpdateSessionTemplateRequest,
+    session_id: str = Depends(verify_session_ownership),
+    current_user = Depends(get_current_user)
+):
+    """
+    Update session template.
+    
+    Args:
+        request: Template update request
+        session_id: Session ID (verified for ownership)
+        current_user: Current authenticated user
+    
+    Returns:
+        Updated session data
+    """
+    try:
+        # Verify session ownership
+        session = session_repository.get_session_by_id(session_id, current_user.id)
+        if not session:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied to this session"
+            )
+        
+        # Verify template exists and belongs to user
+        from repositories.user_repository import template_repository
+        template = template_repository.get_template_by_id(request.template_id, current_user.id)
+        if not template:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Template not found"
+            )
+        
+        logger.info(f"Updating template for session {session_id} to template {request.template_id}")
+        
+        # Update session template_id in database
+        from core.database import db_manager
+        client = db_manager.get_service_client()
+        
+        result = client.table('recording_sessions')\
+            .update({
+                "template_id": request.template_id,
+                "updated_at": datetime.utcnow().isoformat()
+            })\
+            .eq('id', session_id)\
+            .eq('user_id', current_user.id)\
+            .execute()
+        
+        if not result.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Session not found or update failed"
+            )
+        
+        # Get updated session
+        updated_session = session_repository.get_session_by_id(session_id, current_user.id)
+        
+        if not updated_session:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Failed to retrieve updated session"
+            )
+        
+        logger.success(f"Session template updated: {session_id} -> template {request.template_id}")
+        
+        return SessionResponse(
+            id=updated_session.id,
+            title=updated_session.title,
+            status=updated_session.status.value,
+            language=updated_session.language,
+            template_id=updated_session.template_id,
+            created_at=updated_session.created_at,
+            updated_at=updated_session.updated_at
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update session template {session_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update session template"
         )

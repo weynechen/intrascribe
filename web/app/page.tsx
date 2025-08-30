@@ -624,7 +624,7 @@ export default function HomePage() {
         aiSummary: aiSummary?.summary || '',
         aiTitle: session.title || '新建录音',
         status: session.status,
-        templateId: 'default' // 模板ID字段，暂时使用默认值
+        templateId: session.template_id || undefined // 使用真实的模板ID
       }
       
       return recording

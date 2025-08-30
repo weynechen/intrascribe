@@ -408,6 +408,7 @@ export interface RecordingSession {
   status: 'created' | 'recording' | 'processing' | 'completed' | 'failed' | 'cancelled'
   language: string
   stt_model?: string
+  template_id?: string
   started_at?: string
   ended_at?: string
   duration_seconds?: number

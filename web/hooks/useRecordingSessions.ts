@@ -80,6 +80,7 @@ export function useRecordingSessions() {
         status: item.status || 'created',
         language: String(item.language || 'zh-CN'),
         stt_model: item.stt_model ? String(item.stt_model) : undefined,
+        template_id: item.template_id ? String(item.template_id) : undefined,
         started_at: item.started_at ? String(item.started_at) : undefined,
         ended_at: item.ended_at ? String(item.ended_at) : undefined,
         duration_seconds: item.duration_seconds ? Number(item.duration_seconds) : undefined,
@@ -176,7 +177,7 @@ export function useRecordingSessions() {
         break
       case 'UPDATE':
         if (payload.new) {
-          console.log('✅ 通过实时订阅更新会话:', payload.new.id, '状态:', payload.new.status)
+          console.log('✅ 通过实时订阅更新会话:', payload.new.id, '状态:', payload.new.status, 'template_id:', payload.new.template_id)
           setSessions(prev => {
             const beforeUpdateCount = prev.length
             const updated = prev.map(session =>
@@ -352,6 +353,7 @@ export function useRecordingSessions() {
           status: item.status || 'created',
           language: String(item.language || 'zh-CN'),
           stt_model: item.stt_model ? String(item.stt_model) : undefined,
+          template_id: item.template_id ? String(item.template_id) : undefined,
           started_at: item.started_at ? String(item.started_at) : undefined,
           ended_at: item.ended_at ? String(item.ended_at) : undefined,
           duration_seconds: item.duration_seconds ? Number(item.duration_seconds) : undefined,
