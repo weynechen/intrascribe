@@ -154,6 +154,54 @@ async def store_transcription_segment(
         )
 
 
+@router.post("/sessions/{session_id}/audio")
+@timing_decorator
+async def store_audio_segment(
+    audio_segment: Dict[str, Any],
+    session_id: str = Depends(verify_session_ownership_or_service),
+    current_user_or_service = Depends(get_current_user_or_service)
+):
+    """
+    Store real-time audio segment.
+    
+    Args:
+        audio_segment: Audio segment data
+        session_id: Session ID (verified for ownership or service access)
+        current_user_or_service: Current authenticated user or None if service
+    
+    Returns:
+        Success confirmation
+    """
+    try:
+        # Validate audio segment data
+        required_fields = ["audio_data", "sample_rate"]
+        if not all(field in audio_segment for field in required_fields):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Missing required fields in audio segment data"
+            )
+        
+        # Store in Redis
+        await redis_manager.store_audio_segment(session_id, audio_segment)
+        
+        logger.debug(f"Stored audio segment for session: {session_id}")
+        
+        return {
+            "success": True,
+            "message": "Audio segment stored successfully",
+            "session_id": session_id
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to store audio segment: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to store audio segment"
+        )
+
+
 @router.delete("/sessions/{session_id}/transcription")
 @timing_decorator
 async def clear_session_transcription(

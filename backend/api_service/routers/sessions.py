@@ -302,11 +302,20 @@ async def get_session_audio_files(
         List of audio files for the session
     """
     try:
-        # TODO: 实现audio_file_repository，目前返回空列表
-        # 这个端点是为了前端兼容性，实际音频文件处理在其他地方
         logger.info(f"Getting audio files for session: {session_id}")
         
-        return []  # 暂时返回空列表，避免404错误
+        # Query audio_files table from database
+        from core.database import db_manager
+        client = db_manager.get_service_client()
+        
+        result = client.table('audio_files').select('*').eq('session_id', session_id).execute()
+        
+        if result.data:
+            logger.success(f"Found {len(result.data)} audio files for session: {session_id}")
+            return result.data
+        else:
+            logger.info(f"No audio files found for session: {session_id}")
+            return []
         
     except Exception as e:
         logger.error(f"Failed to get audio files for session {session_id}: {e}")

@@ -50,7 +50,7 @@ logger = ServiceLogger("agent-service")
 class MicroserviceSTT(STT):
     """STT implementation that calls STT microservice for transcription"""
     
-    def __init__(self, session_id: str):
+    def __init__(self, session_id: str, audio_cache_callback=None):
         capabilities = STTCapabilities(
             streaming=False,
             interim_results=False,
@@ -60,6 +60,7 @@ class MicroserviceSTT(STT):
         self.stt_client = ServiceClient(service_urls.stt_service_url)
         self._audio_buffer = bytearray()
         self._buffer_threshold = 24000 * 2  # 2 seconds of audio data (24kHz)
+        self._audio_cache_callback = audio_cache_callback  # Callback for audio caching
         
         logger.info(f"STT client initialized for session: {session_id}")
     
@@ -110,6 +111,10 @@ class MicroserviceSTT(STT):
                 
                 logger.debug(f"Processing audio: sample_rate={target_sample_rate}, samples={len(audio_final)}")
                 
+                # Store audio segment in cache (before transcription)
+                if self._audio_cache_callback:
+                    await self._audio_cache_callback(audio_final, target_sample_rate)
+                
                 # Call STT microservice
                 try:
                     response = await self.stt_client.post("/transcribe", {
@@ -159,6 +164,8 @@ class MicroserviceSTT(STT):
             )
 
 
+
+
 class Transcriber(Agent):
     """Simple transcription Agent following LiveKit Agent framework"""
     
@@ -169,8 +176,40 @@ class Transcriber(Agent):
         self._http_client = httpx.AsyncClient(timeout=10.0)
         super().__init__(
             instructions="Transcribe user speech to text",
-            stt=MicroserviceSTT(session_id),
+            stt=MicroserviceSTT(session_id, audio_cache_callback=self._cache_audio_segment),
         )
+
+    async def _cache_audio_segment(self, audio_data: np.ndarray, sample_rate: int):
+        """Cache audio segment to Redis via API service"""
+        try:
+            # Get service token for internal API calls
+            service_token = os.getenv("SERVICE_TOKEN")
+            if not service_token:
+                logger.warning("No SERVICE_TOKEN found, skipping audio cache")
+                return
+            
+            # Prepare audio segment data for storage
+            audio_segment = {
+                "audio_data": audio_data.tolist(),  # Convert numpy array to list for JSON
+                "sample_rate": sample_rate,
+                "timestamp": datetime.now().isoformat(),
+                "duration_seconds": len(audio_data) / sample_rate
+            }
+            
+            # Call API service to store audio segment in Redis
+            response = await self._http_client.post(
+                f"{self._api_base_url}/api/v1/realtime/sessions/{self.session_id}/audio",
+                json=audio_segment,
+                headers={"Authorization": f"Bearer {service_token}"}
+            )
+            
+            if response.status_code == 200:
+                logger.debug(f"Audio segment cached to Redis for session: {self.session_id}")
+            else:
+                logger.warning(f"Failed to cache audio to Redis: {response.status_code} - {response.text}")
+                
+        except Exception as e:
+            logger.error(f"Failed to cache audio segment: {e}")
 
     async def on_user_turn_completed(self, chat_ctx: llm.ChatContext, new_message: llm.ChatMessage):
         """User speech transcription completed - send transcription data to frontend"""

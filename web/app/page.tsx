@@ -92,6 +92,9 @@ export default function HomePage() {
   // 添加当前录音会话ID状态
   const [currentRecordingSessionId, setCurrentRecordingSessionId] = useState<string>('')
   
+  // 音频刷新ref
+  const refreshAudioRef = useRef<(() => Promise<void>) | null>(null)
+  
   // 模板选择状态 - 暂时移除未使用的状态
   // const [selectedTemplateId, setSelectedTemplateId] = useState<string | undefined>()
 
@@ -163,6 +166,15 @@ export default function HomePage() {
           await finalizeSession(currentRecordingSessionId)
           console.log('✅ 会话完成，转录数据已保存')
           toast.success('转录数据已保存到数据库')
+          
+          // 等待一下，然后手动刷新音频文件
+          setTimeout(async () => {
+            if (refreshAudioRef.current) {
+              console.log('🔄 触发音频文件刷新')
+              await refreshAudioRef.current()
+            }
+          }, 3000)
+          
         } catch (error) {
           console.error('❌ 完成会话失败:', error)
           toast.error('保存转录数据失败，但实时数据仍可用')
@@ -1166,6 +1178,7 @@ export default function HomePage() {
                 onAudioTimeUpdate={handleAudioTimeUpdate}
                 onAudioSeekTo={handleSeekToTime}
                 onRefreshSessions={handleRefreshSessions}
+                onRefreshAudio={refreshAudioRef}
                 apiClient={apiClient}
               />
               <div className="flex flex-1 min-h-0">

@@ -72,6 +72,56 @@ class RedisManager:
         except Exception as e:
             logger.error(f"Failed to store transcription segment: {e}")
     
+    async def store_audio_segment(
+        self, 
+        session_id: str, 
+        audio_segment: Dict[str, Any]
+    ):
+        """Store audio segment in Redis"""
+        try:
+            redis = await self.get_redis()
+            
+            # Add server timestamp
+            audio_segment["server_timestamp"] = time.time()
+            
+            # Store in list for later processing
+            await redis.lpush(
+                f"session:{session_id}:audio", 
+                json.dumps(audio_segment)
+            )
+            
+            # Set expiration (24 hours)
+            await redis.expire(f"session:{session_id}:audio", 86400)
+            
+            logger.debug(f"Stored audio segment for session: {session_id}")
+            
+        except Exception as e:
+            logger.error(f"Failed to store audio segment: {e}")
+    
+    async def get_session_audio_segments(self, session_id: str) -> List[Dict[str, Any]]:
+        """Get all audio segments for a session"""
+        try:
+            redis = await self.get_redis()
+            
+            # Get all segments (most recent first)
+            segments_json = await redis.lrange(f"session:{session_id}:audio", 0, -1)
+            
+            segments = []
+            for segment_json in reversed(segments_json):  # Reverse to get chronological order
+                try:
+                    segment = json.loads(segment_json)
+                    segments.append(segment)
+                except json.JSONDecodeError:
+                    continue
+            
+            logger.debug(f"Retrieved {len(segments)} audio segments for session: {session_id}")
+            
+            return segments
+            
+        except Exception as e:
+            logger.error(f"Failed to get session audio segments: {e}")
+            return []
+    
     async def get_session_transcriptions(self, session_id: str) -> List[Dict[str, Any]]:
         """Get all transcription segments for a session"""
         try:
@@ -107,6 +157,18 @@ class RedisManager:
             
         except Exception as e:
             logger.error(f"Failed to clear session transcriptions: {e}")
+    
+    async def clear_session_audio_segments(self, session_id: str):
+        """Clear audio segment data for a session"""
+        try:
+            redis = await self.get_redis()
+            
+            await redis.delete(f"session:{session_id}:audio")
+            
+            logger.info(f"Cleared audio segment data for session: {session_id}")
+            
+        except Exception as e:
+            logger.error(f"Failed to clear session audio segments: {e}")
     
     # =============== Session State Management ===============
     
