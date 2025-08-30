@@ -3,7 +3,8 @@ Shared configuration management for microservices.
 Centralizes environment variables and service URLs.
 """
 import os
-from typing import Optional
+import yaml
+from typing import Optional, Dict, Any
 from pydantic_settings import BaseSettings
 from pathlib import Path
 
@@ -127,6 +128,69 @@ class AIConfig(BaseSettings):
     class Config:
         env_file = str(ENV_FILE_PATH)
         extra = "ignore"
+
+
+def get_ai_config() -> Dict[str, Any]:
+    """
+    Load AI configuration from ai_config.yaml file.
+    
+    Returns:
+        Dictionary containing AI configuration
+    """
+    config_path = BACKEND_ROOT / "ai_config.yaml"
+    
+    if not config_path.exists():
+        # Return default configuration if file doesn't exist
+        return {
+            "ai_summary": {
+                "provider": "litellm",
+                "models": [],
+                "prompts": {
+                    "system_prompt": "你是一个专业的会议记录助手，擅长分析会议转录内容并生成结构化的总结。",
+                    "user_prompt_template": "请对以下会议转录内容进行总结：\n\n转录内容：\n{transcription}\n\n请生成一份结构化的会议总结，包含关键要点、行动项目、重要决策等内容。"
+                }
+            },
+            "retry": {
+                "max_attempts": 3,
+                "backoff_factor": 2,
+                "timeout": 30
+            },
+            "fallback": {
+                "enabled": True,
+                "mock_response": True
+            }
+        }
+    
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = yaml.safe_load(f)
+        
+        return config or {}
+    
+    except Exception as e:
+        from shared.logging import ServiceLogger
+        logger = ServiceLogger("config")
+        logger.error(f"Failed to load AI config from {config_path}: {e}")
+        # Return default config on error
+        return {
+            "ai_summary": {
+                "provider": "litellm",
+                "models": [],
+                "prompts": {
+                    "system_prompt": "你是一个专业的会议记录助手，擅长分析会议转录内容并生成结构化的总结。",
+                    "user_prompt_template": "请对以下会议转录内容进行总结：\n\n转录内容：\n{transcription}\n\n请生成一份结构化的会议总结，包含关键要点、行动项目、重要决策等内容。"
+                }
+            },
+            "retry": {
+                "max_attempts": 3,
+                "backoff_factor": 2,
+                "timeout": 30
+            },
+            "fallback": {
+                "enabled": True,
+                "mock_response": True
+            }
+        }
 
 
 # Global configuration instances

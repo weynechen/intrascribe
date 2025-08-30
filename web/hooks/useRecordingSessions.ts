@@ -793,7 +793,7 @@ export function useRecordingSessions() {
     try {
       console.log('🤖 生成AI标题:', sessionId)
       
-      const result = await apiClient.generateTitle(transcription, summary)
+      const result = await apiClient.generateTitle(sessionId, transcription, summary)
       console.log('✅ AI标题生成完成:', result)
       
       await updateSessionTitle(sessionId, result.title)

@@ -200,7 +200,7 @@ async def service_info() -> Dict[str, Any]:
             "users": "/api/v1/users",
             "templates": "/api/v1/templates", 
             "transcriptions": "/api/v1/transcriptions",
-            "ai_services": "/api/v1/summarize",
+            "ai_sessions": "/api/v2/sessions/{session_id}/ai-summary",
             "livekit": "/api/v1/livekit",
             "audio": "/api/v1/audio",
             "realtime": "/api/v1/realtime",
@@ -214,7 +214,7 @@ async def service_info() -> Dict[str, Any]:
 
 
 # Include routers
-from routers import sessions, sessions_v2, tasks_v2, users, templates, transcriptions, ai_services, livekit, audio, realtime
+from routers import sessions, sessions_v2, tasks_v2, users, templates, transcriptions, ai_sessions, livekit, audio, realtime
 
 app.include_router(sessions.router, prefix="/api/v1")
 app.include_router(sessions_v2.router, prefix="/api")  # V2 routes
@@ -222,7 +222,7 @@ app.include_router(tasks_v2.router, prefix="/api")  # V2 task routes
 app.include_router(users.router, prefix="/api/v1") 
 app.include_router(templates.router, prefix="/api/v1")
 app.include_router(transcriptions.router, prefix="/api/v1")
-app.include_router(ai_services.router, prefix="/api/v1")
+app.include_router(ai_sessions.router, prefix="/api")  # AI Sessions V2 routes
 app.include_router(livekit.router, prefix="/api/v1")
 app.include_router(audio.router, prefix="/api/v1")
 app.include_router(realtime.router, prefix="/api/v1")

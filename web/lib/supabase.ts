@@ -733,31 +733,44 @@ export class APIClient {
 
   // AI 服务 - 统一响应处理
   async generateSummary(transcription: string, sessionId: string, templateId?: string): Promise<AISummaryResponse> {
-    // 直接调用内部的summarize API，它会处理V2异步任务
-    const response = await this.request<any>('/summarize', {
+    // 调用基于session的summarize API
+    const baseURL = this.baseURL.replace('/v1', '') // 移除v1，直接访问v2
+    
+    const response = await fetch(`${baseURL}/v2/sessions/${sessionId}/summarize`, {
       method: 'POST',
-      body: JSON.stringify({ 
-        transcription,
-        sessionId,
-        templateId
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.getAuthToken()}`
+      },
+      body: JSON.stringify({
+        transcription_text: transcription,
+        ...(templateId && { template_id: templateId })
       })
     })
     
-    // 根据响应格式判断是否需要轮询
-    if (this.isAsyncResponse(response)) {
-      console.log('🔄 检测到异步响应，开始轮询:', response.task_id)
-      const result = await this.pollV2TaskStatus(response.task_id)
+    if (!response.ok) {
+      throw new Error(`Summary generation failed: ${response.status}`)
+    }
+    
+    const data = await response.json()
+    
+    // 检查是否是异步响应
+    if (this.isAsyncResponse(data)) {
+      console.log('🔄 检测到异步响应，开始轮询:', data.task_id)
+      const result = await this.pollV2TaskStatus(data.task_id)
       return {
         summary: result.summary,
         key_points: result.key_points || [],
         metadata: result.metadata || {}
       }
-    } else if (this.isSyncResponse(response)) {
-      console.log('✅ 检测到同步响应')
-      return response.data
     } else {
-      // 兼容旧格式
-      return response
+      // 直接返回同步响应
+      console.log('✅ 收到同步响应')
+      return {
+        summary: data.summary,
+        key_points: data.key_points || [],
+        metadata: data.metadata || {}
+      }
     }
   }
 
@@ -888,15 +901,27 @@ export class APIClient {
     }
   }
 
-  async generateTitle(transcription: string, summary?: string): Promise<AITitleResponse> {
-    // 调用本地generate-title API，它现在使用本地算法生成标题
-    return this.request<AITitleResponse>('/generate-title', {
+  async generateTitle(sessionId: string, transcription: string, summary?: string): Promise<AITitleResponse> {
+    // 调用基于session的generate-title API
+    const baseURL = this.baseURL.replace('/v1', '') // 移除v1，直接访问v2
+    
+    const response = await fetch(`${baseURL}/v2/sessions/${sessionId}/generate-title`, {
       method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.getAuthToken()}`
+      },
       body: JSON.stringify({
-        transcription,
-        ...(summary && { summary })
+        transcription_text: transcription,
+        summary_text: summary
       })
     })
+    
+    if (!response.ok) {
+      throw new Error(`Title generation failed: ${response.status}`)
+    }
+    
+    return response.json()
   }
 
   // 转录管理

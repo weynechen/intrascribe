@@ -35,11 +35,24 @@ def update_task_status(task_id: str, status: str, progress: Optional[Dict] = Non
     }
 
 
-@router.get("/{task_id}/status")
+@router.get("/{task_id}")
 @timing_decorator
-async def get_task_status(task_id: str):
+async def get_task(task_id: str):
     """
-    Get task status by task ID.
+    Get task information by task ID.
+    
+    Args:
+        task_id: Task ID to query
+    
+    Returns:
+        Task information
+    """
+    return await get_task_status_impl(task_id)
+
+
+async def get_task_status_impl(task_id: str):
+    """
+    Internal implementation for getting task status.
     
     Args:
         task_id: Task ID to query
@@ -48,6 +61,17 @@ async def get_task_status(task_id: str):
         Task status information
     """
     try:
+        # Handle special case for "undefined" task_id
+        if task_id == "undefined":
+            return {
+                "success": False,
+                "message": "Invalid task ID",
+                "timestamp": datetime.utcnow().isoformat(),
+                "task_id": task_id,
+                "status": "error",
+                "error": "Task ID is undefined - check client implementation"
+            }
+        
         # For now, simulate task completion after a short delay
         # In production, this would query actual task status from Redis/database
         
@@ -100,6 +124,21 @@ async def get_task_status(task_id: str):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to get task status"
         )
+
+
+@router.get("/{task_id}/status")
+@timing_decorator
+async def get_task_status(task_id: str):
+    """
+    Get task status by task ID.
+    
+    Args:
+        task_id: Task ID to query
+    
+    Returns:
+        Task status information
+    """
+    return await get_task_status_impl(task_id)
 
 
 @router.delete("/{task_id}")
