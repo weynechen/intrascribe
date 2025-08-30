@@ -11,8 +11,9 @@ import subprocess
 import time
 import numpy as np
 from typing import Dict, Any, Optional, List, Tuple
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from datetime import datetime
+from pydantic import BaseModel
 
 # Add shared components to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '../..'))
@@ -25,11 +26,23 @@ from core.auth import get_current_user, verify_session_ownership
 from core.redis import redis_manager
 from core.database import db_manager
 from repositories.session_repository import session_repository
-from routers.transcriptions import transcription_repository
+from routers.transcriptions import transcription_repository, _process_batch_audio_file
 
 logger = ServiceLogger("sessions-v2-api")
 
 router = APIRouter(prefix="/v2/sessions", tags=["Sessions V2"])
+
+
+class RetranscribeResponse(BaseModel):
+    """Response model for retranscribe operation"""
+    success: bool
+    message: str
+    session_id: str
+    task_id: Optional[str] = None
+    transcription_id: Optional[str] = None
+    timestamp: str
+    status: str
+    result: Optional[Dict[str, Any]] = None
 
 
 def extract_session_id_from_path(session_id_param: str) -> str:
@@ -487,4 +500,241 @@ async def get_session_status_v2(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to get session status"
+        )
+
+
+async def _download_audio_from_storage_v2(storage_path: str, storage_bucket: str = "audio-recordings") -> bytes:
+    """Download audio file from Supabase Storage for V2 API"""
+    try:
+        client = db_manager.get_service_client()
+        
+        logger.info(f"Downloading audio file from storage: {storage_path}")
+        
+        # Download file from storage
+        result = client.storage.from_(storage_bucket).download(storage_path)
+        
+        if not result:
+            raise Exception("Failed to download audio file from storage")
+        
+        logger.success(f"Audio file downloaded successfully: {len(result)} bytes")
+        return result
+        
+    except Exception as e:
+        logger.error(f"Failed to download audio from storage: {e}")
+        raise
+
+
+async def _retranscribe_session_audio_v2(session_id: str, user_id: str, language: str = "zh-CN", task_id: str = None) -> Dict[str, Any]:
+    """Retranscribe audio for an existing session (V2 implementation) with progress tracking"""
+    try:
+        logger.info(f"Starting retranscription for session: {session_id}")
+        
+        # Import tasks_v2 for progress updates
+        from routers.tasks_v2 import update_task_status
+        
+        # Update progress: Finding audio files
+        if task_id:
+            update_task_status(task_id, "started", progress={"step": "finding_audio", "percentage": 15})
+        
+        # Get session's audio files
+        client = db_manager.get_service_client()
+        
+        audio_files_result = client.table('audio_files')\
+            .select('*')\
+            .eq('session_id', session_id)\
+            .eq('upload_status', 'completed')\
+            .execute()
+        
+        if not audio_files_result.data:
+            return {"success": False, "error": "No audio files found for this session"}
+        
+        # Update progress: Downloading audio
+        if task_id:
+            update_task_status(task_id, "started", progress={"step": "downloading_audio", "percentage": 25})
+        
+        # Use the first available audio file
+        audio_file = audio_files_result.data[0]
+        storage_path = audio_file['storage_path']
+        storage_bucket = audio_file.get('storage_bucket', 'audio-recordings')
+        original_filename = audio_file.get('original_filename', f"session_{session_id}.mp3")
+        
+        # Download audio file from storage
+        audio_content = await _download_audio_from_storage_v2(storage_path, storage_bucket)
+        
+        # Update progress: Cleaning up old transcriptions
+        if task_id:
+            update_task_status(task_id, "started", progress={"step": "cleaning_old_data", "percentage": 35})
+        
+        # Determine file format
+        file_format = audio_file.get('format', 'mp3')
+        
+        # Delete existing transcriptions for this session
+        logger.info(f"Deleting existing transcriptions for session: {session_id}")
+        existing_transcriptions = client.table('transcriptions')\
+            .select('id')\
+            .eq('session_id', session_id)\
+            .execute()
+        
+        if existing_transcriptions.data:
+            for transcription in existing_transcriptions.data:
+                client.table('transcriptions')\
+                    .delete()\
+                    .eq('id', transcription['id'])\
+                    .execute()
+            logger.info(f"Deleted {len(existing_transcriptions.data)} existing transcriptions")
+        
+        # Update progress: Processing audio
+        if task_id:
+            update_task_status(task_id, "started", progress={"step": "processing_audio", "percentage": 50})
+        
+        # Process audio with new transcription
+        processing_result = await _process_batch_audio_file(
+            audio_content=audio_content,
+            file_format=file_format,
+            original_filename=original_filename,
+            session_id=session_id,
+            user_id=user_id,
+            language=language
+        )
+        
+        if processing_result["success"]:
+            logger.success(f"Retranscription completed successfully for session: {session_id}")
+            return {
+                "success": True,
+                "session_id": session_id,
+                "transcription_id": processing_result.get('transcription_id'),
+                "duration_seconds": processing_result.get('duration_seconds'),
+                "total_segments": processing_result.get('total_segments'),
+                "speaker_count": processing_result.get('speaker_count'),
+                "transcription_content": processing_result.get('transcription_content')
+            }
+        else:
+            logger.error(f"Retranscription failed: {processing_result.get('error')}")
+            return {"success": False, "error": processing_result.get('error')}
+        
+    except Exception as e:
+        logger.error(f"Retranscription failed for session {session_id}: {e}")
+        return {"success": False, "error": str(e)}
+
+
+async def _retranscribe_session_background_task_v2(session_id: str, user_id: str, task_id: str, language: str = "zh-CN"):
+    """Background task for retranscribing session audio (V2)"""
+    try:
+        # Import tasks_v2 to update task status
+        from routers.tasks_v2 import update_task_status
+        
+        # Update task status to started
+        update_task_status(task_id, "started", progress={"step": "initializing", "percentage": 10})
+        
+        logger.info(f"Starting V2 background retranscription task: {task_id} for session: {session_id}")
+        
+        # Perform the retranscription with progress tracking
+        result = await _retranscribe_session_audio_v2(session_id, user_id, language, task_id)
+        
+        if result["success"]:
+            # Update task status to success
+            update_task_status(task_id, "success", 
+                progress={"step": "completed", "percentage": 100},
+                result={
+                    "message": "Session retranscribed successfully",
+                    "session_id": session_id,
+                    "transcription_id": result.get('transcription_id'),
+                    "duration_seconds": result.get('duration_seconds', 0),
+                    "total_segments": result.get('total_segments', 0),
+                    "speaker_count": result.get('speaker_count', 1),
+                    "content_preview": result.get('transcription_content', '')[:100] + "..." if result.get('transcription_content') else None
+                }
+            )
+            logger.success(f"V2 background retranscription completed: {task_id}")
+        else:
+            # Update task status to failed
+            update_task_status(task_id, "failed", error=result.get('error'))
+            logger.error(f"V2 background retranscription failed: {task_id} - {result.get('error')}")
+            
+    except Exception as e:
+        # Import tasks_v2 to update task status
+        from routers.tasks_v2 import update_task_status
+        
+        logger.error(f"V2 background retranscription task failed: {task_id} - {e}")
+        update_task_status(task_id, "failed", error=str(e))
+
+
+@router.post("/{session_id}/retranscribe", response_model=RetranscribeResponse)
+@timing_decorator
+async def retranscribe_session_v2(
+    background_tasks: BackgroundTasks,
+    session_id: str,
+    current_user = Depends(get_current_user)
+):
+    """
+    Retranscribe session audio using the latest transcription algorithms (V2 API).
+    
+    This operation runs asynchronously in the background.
+    
+    Args:
+        background_tasks: FastAPI background tasks
+        session_id: Session ID or room name (will extract actual session ID)
+        current_user: Current authenticated user
+    
+    Returns:
+        Task ID for tracking retranscription progress
+    """
+    try:
+        # Extract actual session ID from path parameter
+        actual_session_id = extract_session_id_from_path(session_id)
+        logger.info(f"Starting retranscription task: {session_id} -> {actual_session_id}")
+        
+        # Verify session ownership manually
+        from core.auth import auth_manager
+        if not auth_manager.verify_session_ownership(actual_session_id, current_user.id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied to this session"
+            )
+        
+        # Get session to verify it exists
+        session = session_repository.get_session_by_id(actual_session_id, current_user.id)
+        if not session:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Session not found"
+            )
+        
+        # Generate task ID
+        task_id = str(uuid.uuid4())
+        
+        # Import tasks_v2 to initialize task status
+        from routers.tasks_v2 import update_task_status
+        
+        # Initialize task status
+        update_task_status(task_id, "pending", progress={"step": "initializing", "percentage": 0})
+        
+        # Start background task
+        background_tasks.add_task(
+            _retranscribe_session_background_task_v2,
+            actual_session_id,
+            current_user.id,
+            task_id,
+            session.language
+        )
+        
+        logger.success(f"V2 retranscription task started: {task_id} for session: {actual_session_id}")
+        
+        # Return immediate response with task_id
+        return RetranscribeResponse(
+            success=True,
+            message="Retranscription task started successfully",
+            session_id=actual_session_id,
+            task_id=task_id,
+            timestamp=datetime.utcnow().isoformat(),
+            status="pending"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to start retranscription task for session {session_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to start retranscription task"
         )
