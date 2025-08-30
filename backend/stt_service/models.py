@@ -158,27 +158,67 @@ class STTModelManager:
                 
                 # Extract text from result
                 if result and len(result) > 0:
-                    text = result[0].get("text", "")
+                    # FunASR result structure analysis
+                    raw_result = result[0]
+                    logger.debug(f"🔍 Raw FunASR result structure: {type(raw_result)} - {raw_result}")
                     
-                    # Clean up text (remove special tokens)
+                    # Try different text extraction methods
+                    text = ""
+                    if isinstance(raw_result, dict):
+                        # Method 1: Direct text field
+                        text = raw_result.get("text", "")
+                        
+                        # Method 2: Check for other possible fields
+                        if not text:
+                            for field in ["transcript", "transcription", "result", "content"]:
+                                if field in raw_result:
+                                    text = raw_result[field]
+                                    break
+                    elif isinstance(raw_result, str):
+                        # Raw result is already a string
+                        text = raw_result
+                    elif hasattr(raw_result, 'text'):
+                        # Object with text attribute
+                        text = raw_result.text
+                    
+                    # Additional result inspection for debugging
+                    logger.debug(f"🔍 Extracted text before cleanup: '{text}' (length: {len(text)})")
+                    
+                    # Clean up text (remove special tokens and whitespace)
                     import re
-                    text = re.sub(r'<\|[^|]*\|>', '', text).strip()
+                    if text:
+                        # Remove FunASR special tokens
+                        text = re.sub(r'<\|[^|]*\|>', '', text)
+                        # Remove extra whitespace
+                        text = re.sub(r'\s+', ' ', text).strip()
+                        # Remove standalone punctuation if it's the only content
+                        if text in [".", "。", ",", "，", "?", "？", "!", "！"]:
+                            text = ""
                     
                     processing_time = int((time.time() - start_time) * 1000)
                     
-                    logger.debug(f"Transcription completed in {processing_time}ms: '{text[:50]}...'")
-                    
-                    return TranscriptionResponse(
-                        success=True,
-                        text=text,
-                        confidence_score=1.0,  # FunASR doesn't provide confidence scores
-                        processing_time_ms=processing_time
-                    )
+                    if text:
+                        logger.success(f"Transcription completed in {processing_time}ms: '{text[:100]}...'")
+                        
+                        return TranscriptionResponse(
+                            success=True,
+                            text=text,
+                            confidence_score=1.0,  # FunASR doesn't provide confidence scores
+                            processing_time_ms=processing_time
+                        )
+                    else:
+                        logger.warning(f"Transcription result is empty after cleanup (processing_time: {processing_time}ms)")
+                        
+                        return TranscriptionResponse(
+                            success=False,
+                            text="",
+                            error_message="Transcription resulted in empty text (possibly no speech detected)"
+                        )
                 else:
                     return TranscriptionResponse(
                         success=False,
                         text="",
-                        error_message="No transcription result"
+                        error_message="No transcription result from model"
                     )
                     
             finally:

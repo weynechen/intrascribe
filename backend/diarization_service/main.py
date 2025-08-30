@@ -8,7 +8,7 @@ import os
 import sys
 import time
 from contextlib import asynccontextmanager
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from fastapi import FastAPI, HTTPException, Request, status, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -70,7 +70,7 @@ app.add_middleware(
 # Request/Response models
 class DiarizeRequest(BaseModel):
     """HTTP request model for diarization"""
-    audio_data: bytes
+    audio_data: str  # Hex-encoded audio data
     file_format: str
     session_id: str = None
 
@@ -81,7 +81,7 @@ class DiarizeResponse(BaseModel):
     segments: list
     speaker_count: int
     processing_time_ms: int = 0
-    error_message: str = None
+    error_message: Optional[str] = None
 
 
 # Middleware for request logging
@@ -191,9 +191,19 @@ async def diarize_audio_data(request: DiarizeRequest):
                 error_message="Diarization not available - using single speaker fallback"
             )
         
+        # Convert hex string back to bytes
+        try:
+            audio_bytes = bytes.fromhex(request.audio_data)
+            logger.debug(f"🔍 Converted hex audio data: {len(audio_bytes)} bytes")
+        except ValueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid hex audio data: {e}"
+            )
+        
         # Perform diarization
         result = diarization_manager.diarize_audio_data(
-            request.audio_data, 
+            audio_bytes,  # Use converted bytes
             request.file_format, 
             request.session_id
         )
@@ -213,7 +223,7 @@ async def diarize_audio_data(request: DiarizeRequest):
             } for seg in result.segments],
             speaker_count=result.speaker_count,
             processing_time_ms=result.processing_time_ms,
-            error_message=result.error_message
+            error_message=result.error_message if result.error_message else None
         )
         
     except Exception as e:

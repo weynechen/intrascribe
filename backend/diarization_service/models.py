@@ -155,7 +155,8 @@ class SpeakerDiarizationManager:
                 success=True,
                 segments=segments,
                 speaker_count=unique_speakers,
-                processing_time_ms=processing_time
+                processing_time_ms=processing_time,
+                error_message=None
             )
             
         except Exception as e:
@@ -193,6 +194,17 @@ class SpeakerDiarizationManager:
         # Create temporary file
         temp_file_path = None
         try:
+            # Validate audio data
+            if not audio_data or len(audio_data) == 0:
+                return SpeakerDiarizationResponse(
+                    success=False,
+                    segments=[],
+                    speaker_count=0,
+                    error_message="Empty audio data"
+                )
+            
+            logger.debug(f"🔍 Processing audio data: {len(audio_data)} bytes, format: {file_format}")
+            
             # Create temporary file with appropriate extension
             with tempfile.NamedTemporaryFile(
                 suffix=f".{file_format}", 
@@ -201,8 +213,31 @@ class SpeakerDiarizationManager:
                 temp_file.write(audio_data)
                 temp_file_path = temp_file.name
             
+            logger.debug(f"📁 Created temp file: {temp_file_path}")
+            
             # Convert to WAV if needed
             processed_file_path = self._convert_to_wav_if_needed(temp_file_path, file_format)
+            
+            # Validate converted file
+            if not os.path.exists(processed_file_path):
+                return SpeakerDiarizationResponse(
+                    success=False,
+                    segments=[],
+                    speaker_count=0,
+                    error_message=f"Failed to create WAV file: {processed_file_path}"
+                )
+            
+            # Check file size
+            file_size = os.path.getsize(processed_file_path)
+            if file_size == 0:
+                return SpeakerDiarizationResponse(
+                    success=False,
+                    segments=[],
+                    speaker_count=0,
+                    error_message="Converted WAV file is empty"
+                )
+            
+            logger.debug(f"📁 Processed file: {processed_file_path}, size: {file_size} bytes")
             
             try:
                 # Perform diarization
@@ -233,22 +268,77 @@ class SpeakerDiarizationManager:
             return file_path
         
         try:
+            import subprocess
+            import tempfile
+            
+            # Create WAV output file  
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_wav:
+                wav_path = temp_wav.name
+            
+            # Use ffmpeg for more reliable conversion
+            cmd = [
+                "ffmpeg",
+                "-i", file_path,
+                "-acodec", "pcm_s16le",  # 16-bit PCM
+                "-ar", "16000",          # 16kHz sample rate  
+                "-ac", "1",              # Mono
+                "-y",                    # Overwrite output file
+                wav_path
+            ]
+            
+            logger.debug(f"Converting {file_format} to WAV using ffmpeg...")
+            
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+            
+            if result.returncode == 0 and os.path.exists(wav_path):
+                logger.debug(f"Successfully converted {file_format} to WAV: {wav_path}")
+                return wav_path
+            else:
+                logger.error(f"ffmpeg conversion failed: {result.stderr}")
+                # Fallback: try librosa/soundfile method
+                return self._convert_to_wav_librosa_fallback(file_path, file_format)
+                
+        except Exception as e:
+            logger.warning(f"ffmpeg conversion failed: {e}")
+            # Fallback: try librosa/soundfile method
+            return self._convert_to_wav_librosa_fallback(file_path, file_format)
+    
+    def _convert_to_wav_librosa_fallback(self, file_path: str, file_format: str) -> str:
+        """Fallback conversion method using librosa/soundfile"""
+        try:
             import librosa
             import soundfile as sf
+            import tempfile
+            
+            logger.debug(f"Using librosa fallback to convert {file_format} to WAV...")
             
             # Load audio with librosa
-            audio_data, sample_rate = librosa.load(file_path, sr=None)
+            audio_data, sample_rate = librosa.load(file_path, sr=16000)  # Force 16kHz
             
-            # Create WAV file
-            wav_path = file_path.replace(f".{file_format}", ".wav")
-            sf.write(wav_path, audio_data, sample_rate)
+            # Create WAV file with proper format
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_wav:
+                wav_path = temp_wav.name
             
-            logger.debug(f"Converted {file_format} to WAV: {wav_path}")
+            # Write WAV file with specific parameters for diarization
+            sf.write(
+                wav_path, 
+                audio_data, 
+                sample_rate, 
+                subtype='PCM_16',  # 16-bit PCM
+                format='WAV'
+            )
+            
+            logger.debug(f"Librosa fallback conversion successful: {wav_path}")
             return wav_path
             
         except Exception as e:
-            logger.warning(f"Failed to convert {file_format} to WAV: {e}")
-            return file_path  # Return original file and hope for the best
+            logger.error(f"All conversion methods failed: {e}")
+            return file_path  # Return original file as last resort
     
     def _remove_overlapping_segments(self, segments: List[SpeakerSegment]) -> List[SpeakerSegment]:
         """Remove overlapping segments by keeping the longer one"""

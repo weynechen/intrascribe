@@ -205,7 +205,7 @@ export function Header({
       
       // Direct call to backend API with proper authentication
       // Note: Don't set Content-Type header for FormData, browser will set it automatically
-      const response = await fetch('/api/v1/batch-transcription', {
+      const response = await fetch('/api/v1/transcriptions/batch', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
