@@ -1,27 +1,28 @@
 # Lightweight LiveKit Agent Dockerfile
-FROM python:3.11-slim
+FROM docker.xuanyuan.me/library/python:3.11-slim
 
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies including uv
 RUN apt-get update && apt-get install -y \
     curl \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install uv
 
-# Copy requirements and install Python dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy pyproject.toml and uv.lock for dependency installation
+COPY ./agent_service/transcribe_agent/pyproject.toml ./agent_service/transcribe_agent/uv.lock ./
+RUN uv sync --frozen --no-dev
 
 # Copy shared components
-COPY ../shared ./shared
+COPY ./shared ./shared
 
 # Copy agent code
-COPY . .
+COPY ./agent_service/transcribe_agent .
 
 # Health check (simple process check)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD pgrep -f "python.*agent.py" || exit 1
 
-# Run the agent
-CMD ["python", "agent.py"]
+# Run the agent using uv
+CMD ["uv", "run", "python", "agent.py"]

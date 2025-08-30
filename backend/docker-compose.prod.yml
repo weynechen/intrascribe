@@ -1,5 +1,5 @@
-# Intrascribe Microservices Architecture
-# Complete Docker Compose setup for all services
+# Production Docker Compose Configuration
+# Optimized for production deployment
 
 version: '3.8'
 
@@ -7,12 +7,13 @@ services:
   # Redis - Message broker and cache
   redis:
     image: docker.xuanyuan.me/library/redis:7-alpine
-    container_name: intrascribe-redis
+    container_name: intrascribe-redis-prod
+    restart: unless-stopped
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -23,10 +24,9 @@ services:
 
   # STT Microservice
   stt-service:
-    build:
-      context: .
-      dockerfile: ./stt_service/Dockerfile
-    container_name: intrascribe-stt
+    image: intrascribe/stt-service:latest
+    container_name: intrascribe-stt-prod
+    restart: unless-stopped
     ports:
       - "8001:8001"
     environment:
@@ -44,23 +44,24 @@ services:
       interval: 30s
       timeout: 30s
       retries: 3
-      start_period: 60s  # Allow time for model loading
+      start_period: 120s  # Allow time for model loading
     deploy:
       resources:
+        limits:
+          memory: 8G
         reservations:
           devices:
             - driver: nvidia
-              count: 1  # GPU support for STT models
+              count: 1
               capabilities: [gpu]
     networks:
       - intrascribe-network
 
   # Speaker Diarization Microservice
   diarization-service:
-    build:
-      context: .
-      dockerfile: ./diarization_service/Dockerfile
-    container_name: intrascribe-diarization
+    image: intrascribe/diarization-service:latest
+    container_name: intrascribe-diarization-prod
+    restart: unless-stopped
     ports:
       - "8002:8002"
     environment:
@@ -78,25 +79,24 @@ services:
       interval: 30s
       timeout: 30s
       retries: 3
-      start_period: 60s  # Allow time for model loading
+      start_period: 120s  # Allow time for model loading
     deploy:
       resources:
+        limits:
+          memory: 8G
         reservations:
           devices:
             - driver: nvidia
-              count: 1  # GPU support for speaker models
+              count: 1
               capabilities: [gpu]
     networks:
       - intrascribe-network
 
-  # AI services are integrated into the main API service
-
   # Main API Service
   api-service:
-    build:
-      context: .
-      dockerfile: ./api_service/Dockerfile
-    container_name: intrascribe-api
+    image: intrascribe/api-service:latest
+    container_name: intrascribe-api-prod
+    restart: unless-stopped
     ports:
       - "8000:8000"
     environment:
@@ -125,17 +125,21 @@ services:
       interval: 30s
       timeout: 30s
       retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 4G
     networks:
       - intrascribe-network
 
-  # Agent Service (scales to 0 by default, started on demand)
+  # Agent Service (production scaling)
   agent-service:
-    build:
-      context: .
-      dockerfile: ./agent_service/transcribe_agent/Dockerfile
-    container_name: intrascribe-agent
+    image: intrascribe/agent-service:latest
+    container_name: intrascribe-agent-prod
+    restart: unless-stopped
     environment:
       - LIVEKIT_API_URL=${LIVEKIT_API_URL}
+      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
       - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
@@ -152,7 +156,10 @@ services:
       api-service:
         condition: service_healthy
     deploy:
-      replicas: 0  # Start manually when needed
+      resources:
+        limits:
+          memory: 2G
+      replicas: 2  # Scale for production
     networks:
       - intrascribe-network
 

@@ -11,7 +11,6 @@ redis>=2.0.1
 # Audio processing (minimal)
 numpy>=1.24.3
 librosa>=0.10.0
-librosa>=0.10.0
 
 # Utilities
 pydantic>=2.5.0
