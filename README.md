@@ -1,6 +1,6 @@
-### IntraScribe
+# IntraScribe
 
-面向企业、学校与机关等内网环境的本地优先语音转写与协作平台：支持实时转写、说话人分离、高质量批处理、AI 总结与标题生成。默认提供浏览器 WebRTC 接入与 SSE 实时返回，也支持边缘设备/硬件作为前端，架构解耦、可替换任意采集与传输方案；数据全程留在本地，重视隐私与合规。
+可完全本地化的，面向企业、学校与机关等内网环境的本地优先语音转写与协作平台：支持实时转写、说话人分离、高质量批处理、AI 总结与标题生成。默认提供浏览器 WebRTC 接入与 SSE 实时返回，也支持边缘设备/硬件作为前端，架构解耦、可替换任意采集与传输方案；数据全程留在本地，重视隐私与合规。
 
 点击图片观看bilibili演示视频
 
@@ -10,7 +10,7 @@
 
 ---
 
-### 功能特性
+# 功能特性
 
 - 本地优先与隐私保护：可在内网/离线环境独立部署，数据不外发，满足隐私与合规要求。
 - 团队与组织协作：账号体系、模板共享与编辑流程，适配企业/学校多用户协作。
@@ -27,7 +27,7 @@
 
 ---
 
-### 适用场景
+# 适用场景
 
 - 企业/事业单位内网部署的会议记录与知识沉淀
 - 学校/研究机构的课堂与研讨记录（支持多人与说话人标注）
@@ -36,7 +36,7 @@
 
 ---
 
-### 技术栈
+# 技术栈
 
 - 前端：Next.js (App Router) + React + TypeScript + Tailwind CSS
 - 后端架构：微服务架构，基于 FastAPI（Python，使用 uv 管理依赖与运行）
@@ -54,7 +54,7 @@
 
 ---
 
-### 目录结构
+# 目录结构
 
 ```text
 intrascribe/
@@ -101,47 +101,62 @@ intrascribe/
 
 ---
 
-### 快速开始
+# 快速开始
+当前我仅在ubuntu 22.04上进行开发和测试，其余Linux平台理论上也支持。但windows和mac可能异常较多。
+## 前置条件
 
-#### 1) 前置条件
-以下为ubuntu下的示范：
+- nvidia GPU 电脑，cuda驱动升级到最新版本。（理论上也支持纯CPU，但我没有测试过）
+- Node.js 18+
+- Python 3.12 与 uv（python 包管理/运行器），参考：https://docs.astral.sh/uv/getting-started/installation/#installation-methods
 
-- **Docker & Docker Compose**：用于微服务容器化部署
-```bash
-# 安装 Docker
-curl -fsSL https://get.docker.com -o get-docker.sh
-sudo sh get-docker.sh
+  ```sh
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  ```
+- ollama qwen3:8b。（可选其他模型，需要修改 backend/ai_config.yaml文件中的模型配置）
+- FFmpeg
 
-# 安装 Docker Compose
-sudo apt-get update
-sudo apt-get install docker-compose-plugin
-```
+  ```
+  sudo apt install ffmpeg
+  ```
+- supabase。参考链接： https://supabase.com/docs/guides/local-development ，进行安装。
 
-- **NVIDIA GPU（推荐）**：用于STT和说话人分离模型加速
-  - CUDA 11.8+ 与相应的 NVIDIA Docker 运行时
-  - 理论上也支持纯CPU，但性能会有所降低
+  ```sh
+  npm install supabase --save-dev
+  ```
+  安装过程中，npm 需要从github 下载二进制包，如果一直卡着不动，可手动下载和安装： https://github.com/supabase/cli/releases
 
-- **LiveKit 服务**：实时音视频处理
-  - 可使用 LiveKit Cloud 或自建 LiveKit 服务器
-  - 获取 API URL、API Key 和 Secret
+- livekit。  https://github.com/livekit/livekit
 
-- **Supabase**：数据库与认证服务
-  - 参考链接：https://supabase.com/docs/guides/local-development
-```bash
-npm install supabase --save-dev
-```
+  ```sh
+  curl -sSL https://get.livekit.io | bash
+  ```
+- redis。 
 
-#### 2) 克隆项目到本地
+  ```sh
+  sudo apt install redis-server -y
+  ```
+  安装完成后检查是否在运行：
+
+  ```sh
+  sudo systemctl status redis-server
+  ```
+
+- 访问huggingface，获取自己的token。
+
+## 克隆项目到本地
+随后，将本项目clone到本地。
+
 ```bash
 git clone https://github.com/weynechen/intrascribe.git
 cd intrascribe
 ```
 
-#### 3) 启动数据库
+
+## 启动数据库
 ```bash
 cd supabase
 # 启动 Supabase 套件
-supabase start
+sudo supabase start -x edge-runtime
 ```
 
 Supabase 会下载一系列的 Docker 镜像，耗时较久，请耐心等待。
@@ -158,88 +173,34 @@ Supabase 会下载一系列的 Docker 镜像，耗时较久，请耐心等待。
         anon key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 service_role key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
-如果过程中出现502错误（网络问题），可以排除edge-runtime ：
-```bash
-sudo supabase start -x edge-runtime
-```
+
 启动成功后，执行数据库初始化
 ```bash
-# 初始化数据库
 supabase db reset
 ```
 访问 http://127.0.0.1:54323/project/default 查看数据是否存在。
 
-注：reset操作只需操作一次即可，否则数据库会被清理掉。如果需要重启supabase，运行
+注：reset操作只需操作一次即可，否则数据库会被清理掉。
 
+如果需要重启supabase，运行
 ```bash
-# Supabase 配置
-SUPABASE_URL=http://127.0.0.1:54321
-SUPABASE_ANON_KEY=你的Supabase匿名Key
-SUPABASE_SERVICE_ROLE_KEY=你的Supabase服务Key
-
-# LiveKit 配置
-LIVEKIT_API_URL=wss://your-livekit-instance.livekit.cloud
-LIVEKIT_API_KEY=你的LiveKit API Key
-LIVEKIT_API_SECRET=你的LiveKit API Secret
-
-# AI 服务配置
-OPENAI_API_KEY=sk-your-openai-key（可选）
-ANTHROPIC_API_KEY=sk-ant-your-anthropic-key（可选）
-
-# HuggingFace 配置（用于说话人分离）
-HUGGINGFACE_TOKEN=你的HuggingFace Token
+supabase stop
+supabase start
 ```
 
-创建 `web/.env.local` 文件：
+## 启动livekit-server
+运行 
 ```bash
-NEXT_PUBLIC_SUPABASE_ANON_KEY=你的Supabase匿名Key
-NEXT_PUBLIC_LIVEKIT_URL=wss://your-livekit-instance.livekit.cloud
+livekit-server --dev
 ```
 
-#### 5) 启动微服务
+## 配置前后端的环境变量
+在web页面下有 .env.local.example，将其拷贝为.env.local。同样backend页面下有 .env.example，将其拷贝为.env 。
 
-初次运行会下载较多的模型文件，国内可设置镜像加速：
-```bash
-export HF_ENDPOINT=https://hf-mirror.com
-```
+随后，修改配置，将其中的 `your-key`和`your-token` 替换成真实的值。
 
-进入后端目录并启动所有微服务：
-```bash
-cd backend
 
-# 初始化开发环境
-make init
-
-# 构建并启动所有微服务
-make up
-
-# 检查服务健康状态
-make health
-```
-
-启动成功后，服务端点如下：
-- **API 服务**：http://localhost:8000 （主要业务逻辑）
-- **STT 服务**：http://localhost:8001 （语音转文字）
-- **说话人分离服务**：http://localhost:8002 （说话人分离）
-- **Web 应用**：http://localhost:3000 （前端界面）
-
-#### 6) 启动 LiveKit 代理（可选）
-实时转写需要启动 LiveKit 代理：
-```bash
-# 启动代理服务
-make agent
-
-# 查看代理日志
-make logs-agent-service
-```
-
----
-
-## 🚀 本地开发快速启动
-
-对于本地开发环境，我们提供了一键启动脚本，无需 Docker：
-
-### 使用一键启动脚本
+## 使用一键启动脚本
 
 ```bash
 # 启动所有服务
@@ -256,51 +217,38 @@ make logs-agent-service
 ./start-dev.sh stop web      # 停止 Web 应用
 ./start-dev.sh stop stt      # 停止 STT 服务
 ./start-dev.sh stop diarization  # 停止说话人分离服务
+./start-dev.sh stop redis    # 停止 Redis 服务
 
 # 查看帮助
 ./start-dev.sh help
 ```
 
-**该脚本会自动：**
-1. ✅ 检查现有运行的服务并提供清理选项
-2. ✅ 检查并启动 Supabase（如果未运行）
-3. ✅ 检查并启动 LiveKit Server（可选）
-4. ✅ 配置 HuggingFace 国内镜像（加速模型下载）
-5. ✅ 启动 Next.js Web 应用（端口 3000）
-6. ✅ 按正确顺序启动微服务：
-   - STT Service (8001) - 首先启动
-   - Diarization Service (8002) - 第二启动（自动配置 HF 镜像）
-   - LiveKit Agent - 第三启动（需要依赖前两个服务）
-   - API Service (8000) - 最后启动（检查其他服务状态）
+## 使用docker（未测试）
 
-**优势：**
-- 🔄 无需 Docker，直接使用本地 Python 环境
-- ⚡ 更快的启动速度和代码热重载
-- 📝 统一的日志管理（logs/ 目录）
-- 🛠️ 智能依赖检查和环境配置
-- 🎯 适合快速开发和调试
+进入后端目录并启动所有微服务：
+```sh
+docker-compose up
+```
 
-**环境要求：**
-- Python 3.10+ 和 uv
-- Node.js 18+ 
-- Supabase CLI
-- LiveKit Server（可选，或使用云服务）
 
-**智能服务管理：**
-- 🔍 自动检测端口冲突和运行中的服务
-- 🛑 优雅停止：`Ctrl+C` 或 `./start-dev.sh stop`
-- 📊 状态监控：`./start-dev.sh status`
-- 🎯 精确控制：可停止特定服务
-- 🔄 重启保护：防止重复启动同一服务
+启动成功后，服务端点如下：
+- **API 服务**：http://localhost:8000 （主要业务逻辑）
+- **STT 服务**：http://localhost:8001 （语音转文字）
+- **说话人分离服务**：http://localhost:8002 （说话人分离）
+- **Web 应用**：http://localhost:3000 （前端界面）
 
----
+
 
 备注：
 1. 目前我只在 ubuntu22.04 进行过安装测试。
 2. 如默认端口更改，需要修改 `next.config.js` 中的代理。
 3. 在局域网内使用，最好搭配 nginx 做https代理（没有在仓库中，需自行搭建）。本项目提供next.js代理方式，操作如下：
 
-安装mkcert
+
+##  局域网访问
+上述启动启动是http的服务，涉及麦克风权限，从其他PC上访问时，浏览器会拒绝访问。因此需要配置为https。当前项目支持next.js自身的代理服务。（生产需要自行替换为nginx作为代理）
+
+### 安装mkcert
 
 ``` bash
 cd web
@@ -320,7 +268,7 @@ sudo mv mkcert-v1.4.4-linux-amd64 /usr/local/bin/mkcert
 mkcert -version
 ```
 
-创建本地CA和证书
+### 创建本地CA和证书
 
 ```bash
 # 1. 安装本地CA到系统信任存储
@@ -340,8 +288,10 @@ npm run dev_https
 ```
 随后可在局域网内通过 https://you_machine_ip:3000 访问
 
+如果是一键脚本启动的，可将`npm run dev` 替换为上述。
 
-### 运行流程（端到端）
+
+# 运行流程（端到端）
 - **登录认证**：使用 Supabase Auth 进行用户登录验证，获取 JWT Token。
 - **创建会话**：
   - 前端调用 API 服务 `POST /api/v1/sessions` 创建新的录音会话。
@@ -363,9 +313,9 @@ npm run dev_https
 
 ---
 
-### API 服务概览
+# API 服务概览
 
-#### 主 API 服务 (端口 8000)
+## 主 API 服务 (端口 8000)
 **核心业务逻辑与集成服务**
 
 - **健康检查与信息**
@@ -397,7 +347,7 @@ npm run dev_https
   - `GET /api/v1/realtime/sessions/{id}/transcription` - 获取实时转写数据
   - `GET /api/v1/realtime/sessions/{id}/status` - 获取会话实时状态
 
-#### STT 微服务 (端口 8001)
+## STT 微服务 (端口 8001)
 **专用语音转文字服务**
 
 - `GET /health` - 服务健康检查
@@ -405,7 +355,7 @@ npm run dev_https
 - `POST /transcribe` - 音频转写（同步）
 - `POST /transcribe-batch` - 批量音频处理
 
-#### 说话人分离微服务 (端口 8002)
+## 说话人分离微服务 (端口 8002)
 **专用说话人分离服务**
 
 - `GET /health` - 服务健康检查  
@@ -420,97 +370,66 @@ npm run dev_https
 
 ---
 
-### 开发与部署要点
+# 开发与部署要点
 
-#### 微服务架构优势
+## 微服务架构优势
 - **服务隔离**：各微服务独立部署、扩缩容，故障隔离性强
 - **资源优化**：STT 和说话人分离服务预加载模型，避免重复初始化
 - **技术栈灵活**：每个服务可使用最适合的技术栈和优化策略
 - **开发效率**：团队可并行开发不同服务，降低耦合度
 
-#### 容器化部署
+## 容器化部署
 - **Docker Compose**：统一管理所有微服务的生命周期
 - **GPU 支持**：STT 和说话人分离服务可配置 GPU 加速，显著提升性能
 - **资源限制**：每个服务可独立配置 CPU、内存资源限制
 - **健康检查**：内置健康检查机制，确保服务可用性
 
-#### 性能优化
+## 性能优化
 - **模型预加载**：FunASR 和 pyannote.audio 模型在服务启动时预加载，避免延迟
 - **Redis 缓存**：实时数据通过 Redis 缓存，提升响应速度
 - **异步处理**：批处理任务异步执行，不阻塞实时功能
 - **连接复用**：微服务间 HTTP 连接复用，减少延迟
 
-#### 配置管理
+## 配置管理
 - **环境变量**：通过 `.env` 文件统一管理配置，支持不同环境
 - **AI 配置**：`backend/ai_config.yaml` 配置多模型、超时与回退策略
 - **LiveKit 集成**：支持 LiveKit Cloud 或自建服务器
 - **FFmpeg 依赖**：容器内预装 FFmpeg，支持音频转码与切分
 
-#### 开发工作流
-- **服务管理**：使用 `make` 命令统一管理服务启动、停止、日志查看
+## 开发工作流
+- **服务管理**：使用脚本统一管理服务启动、停止、日志查看
 - **热重载**：开发模式下支持代码变更自动重启服务
 - **日志聚合**：所有服务日志统一收集，便于调试
 - **健康监控**：实时监控各服务健康状态
 
 ---
+# 常见问题（FAQ）
+- 实时转写没有输出？
+  - 检查浏览器是否授权麦克风；
+- 说话人分离不可用？
+  - 检查 `HUGGINGFACE_TOKEN` 是否配置；pyannote 模型需要授权；若不可用系统会回退为单一说话人。
+- 音频无法转码或处理失败？
+  - 确认 FFmpeg 安装并在 PATH 中；查看后端日志中的命令与错误消息。
+- 无法生成总结/标题？
+  - 检查后端是否已正确配置模型与 API Key（LiteLLM）。
+- CUDA警告？
+  - 检查pytorch cuda版本与系统的NVIDIA 驱动版本
 
-### 常见问题（FAQ）
-
-#### 微服务相关
-- **服务启动失败？**
-  - 检查 Docker 和 Docker Compose 版本是否支持
-  - 使用 `make health` 检查各服务健康状态
-  - 查看 `make logs` 获取详细错误信息
-
-- **STT 服务无响应？**
-  - 检查 GPU 是否正确配置（`nvidia-smi` 验证）
-  - 模型下载可能需要时间，查看 `make logs-stt-service`
-  - 确认 HuggingFace 镜像配置（国内用户）
-
-- **说话人分离服务失败？**
-  - 验证 `HUGGINGFACE_TOKEN` 配置是否正确
-  - 检查网络连接，模型需要在线下载
-  - 若无法使用，系统会自动回退为单一说话人模式
-
-#### LiveKit 集成
-- **实时转写没有输出？**
-  - 检查浏览器麦克风权限授权
-  - 验证 LiveKit 连接配置（API URL、Secret）
-  - 确认 LiveKit 代理服务是否启动（`make agent`）
-  - 检查 `make logs-agent-service` 查看代理日志
-
-- **音频质量问题？**
-  - 检查网络连接稳定性
-  - 调整 LiveKit 音频编码参数
-  - 确认微服务间网络延迟
-
-#### 部署相关
-- **容器资源不足？**
-  - 检查 Docker 资源限制配置
-  - 监控服务资源使用情况（`make stats`）
-  - 考虑扩展服务实例数量
-
-- **AI 服务无法使用？**
-  - 检查 OpenAI/Anthropic API Key 配置
-  - 验证网络连接和 API 额度
-  - 查看 `backend/ai_config.yaml` 配置
-
-- **GPU 相关警告？**
-  - 检查 NVIDIA 驱动版本与 CUDA 兼容性
-  - 验证 Docker GPU 运行时配置
-  - 可临时禁用 GPU 使用 CPU 模式运行
----
-
-### License
+# License
 MIT
 
 ## Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=weynechen/intrascribe&type=Date)](https://www.star-history.com/#weynechen/intrascribe&Date)
 
-### TODO
-开发会议助手硬件：
+# TODO
+## 手机APP
+
+## 硬件
 
 - 增加麦克风阵列硬件接入
 - 增加AI对话功能，使用RAG实时回答记录相关的问题
+
+## 其他功能
+TBD
 

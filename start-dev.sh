@@ -153,6 +153,7 @@ stop_services() {
         ["api"]="8000"
         ["stt"]="8001"
         ["diarization"]="8002"
+        ["redis"]="6379"
     )
     
     if [ "$1" = "all" ]; then
@@ -171,6 +172,16 @@ stop_services() {
         # Also kill any uv run processes
         pkill -f "uv run" 2>/dev/null || true
         
+        # Stop Redis if it was started manually
+        if [ -f "$LOG_DIR/redis.pid" ]; then
+            local redis_pid=$(cat "$LOG_DIR/redis.pid" 2>/dev/null)
+            if [ -n "$redis_pid" ] && kill -0 "$redis_pid" 2>/dev/null; then
+                print_status "Stopping Redis (PID: $redis_pid)"
+                kill "$redis_pid" 2>/dev/null || true
+                rm -f "$LOG_DIR/redis.pid"
+            fi
+        fi
+        
         print_success "All services stopped"
         return 0
     fi
@@ -182,6 +193,12 @@ stop_services() {
             if [ -n "$pid" ]; then
                 print_status "Stopping $1 service (PID: $pid)"
                 kill "$pid" 2>/dev/null || true
+                
+                # Special handling for Redis
+                if [ "$1" = "redis" ] && [ -f "$LOG_DIR/redis.pid" ]; then
+                    rm -f "$LOG_DIR/redis.pid"
+                fi
+                
                 print_success "$1 service stopped"
             else
                 print_warning "$1 service is not running"
@@ -192,7 +209,7 @@ stop_services() {
         return 0
     fi
     
-    print_error "Usage: stop_services [all|web|api|stt|diarization]"
+    print_error "Usage: stop_services [all|web|api|stt|diarization|redis]"
     print_status "Available services: ${!service_ports[*]}"
 }
 
@@ -205,13 +222,23 @@ show_services_status() {
         ["API Service"]="8000"
         ["STT Service"]="8001"
         ["Diarization Service"]="8002"
+        ["Redis"]="6379"
     )
     
     for service in "${!service_ports[@]}"; do
         local port="${service_ports[$service]}"
         if port_in_use "$port"; then
             local pid=$(lsof -ti :"$port" 2>/dev/null | head -1)
-            print_success "$service: ✅ Running on port $port (PID: $pid)"
+            if [ "$service" = "Redis" ]; then
+                # Special check for Redis connectivity
+                if redis-cli ping >/dev/null 2>&1; then
+                    print_success "$service: ✅ Running on port $port (PID: $pid) - Responding"
+                else
+                    print_warning "$service: ⚠️ Running on port $port (PID: $pid) - Not responding"
+                fi
+            else
+                print_success "$service: ✅ Running on port $port (PID: $pid)"
+            fi
         else
             print_error "$service: ❌ Not running"
         fi
@@ -253,6 +280,94 @@ check_supabase() {
     fi
     
     cd "$SCRIPT_DIR"
+}
+
+# Function to check Redis
+check_redis() {
+    print_section "Checking Redis"
+    
+    # Check if redis-server is installed
+    if ! command_exists redis-server; then
+        print_error "Redis server is not installed!"
+        print_status "Install it with:"
+        print_status "  Ubuntu/Debian: sudo apt install redis-server"
+        print_status "  CentOS/RHEL: sudo yum install redis"
+        print_status "  macOS: brew install redis"
+        exit 1
+    fi
+    
+    print_success "Redis server is installed"
+    
+    # Check if Redis is responding (more reliable than port check)
+    if redis-cli ping >/dev/null 2>&1; then
+        print_success "Redis is already running and responding"
+        return 0
+    fi
+    
+    # Check if Redis service is running via systemctl
+    if command_exists systemctl; then
+        if systemctl is-active --quiet redis-server 2>/dev/null; then
+            print_success "Redis service is active"
+            # Wait a moment and test connection again
+            sleep 1
+            if redis-cli ping >/dev/null 2>&1; then
+                print_success "Redis is now responding to ping"
+                return 0
+            else
+                print_warning "Redis service is running but not responding on default connection"
+                print_status "This might be a configuration issue (binding address, port, etc.)"
+                print_status "Continuing anyway - please check Redis configuration if needed"
+                return 0
+            fi
+        elif systemctl is-active --quiet redis 2>/dev/null; then
+            print_success "Redis service is active (alternative service name)"
+            # Wait a moment and test connection again
+            sleep 1
+            if redis-cli ping >/dev/null 2>&1; then
+                print_success "Redis is now responding to ping"
+                return 0
+            else
+                print_warning "Redis service is running but not responding on default connection"
+                print_status "This might be a configuration issue (binding address, port, etc.)"
+                print_status "Continuing anyway - please check Redis configuration if needed"
+                return 0
+            fi
+        fi
+    fi
+    
+    # If not running, try to start it
+    print_warning "Redis is not running. Starting Redis server..."
+    
+    # Try to start Redis server
+    if command_exists systemctl; then
+        # Using systemd
+        if sudo systemctl start redis-server 2>/dev/null; then
+            print_success "Redis started using systemctl (redis-server)"
+            sleep 2
+        elif sudo systemctl start redis 2>/dev/null; then
+            print_success "Redis started using systemctl (redis)"
+            sleep 2
+        else
+            print_warning "Failed to start Redis with systemctl, trying manual start..."
+            redis-server --daemonize yes --logfile "$LOG_DIR/redis.log" --pidfile "$LOG_DIR/redis.pid"
+            sleep 2
+        fi
+    else
+        # Manual start
+        redis-server --daemonize yes --logfile "$LOG_DIR/redis.log" --pidfile "$LOG_DIR/redis.pid"
+        sleep 2
+    fi
+    
+    # Final check
+    if redis-cli ping >/dev/null 2>&1; then
+        print_success "Redis is now running and responding to ping"
+    else
+        print_error "Failed to start Redis server or it's not responding"
+        print_status "Please check Redis configuration and try starting manually:"
+        print_status "  sudo systemctl start redis-server"
+        print_status "  redis-cli ping"
+        exit 1
+    fi
 }
 
 # Function to check LiveKit Server
@@ -535,6 +650,9 @@ display_summary() {
     echo -e "  • STT Service:  $LOG_DIR/stt_service.log"
     echo -e "  • Diarization:  $LOG_DIR/diarization_service.log"
     echo -e "  • LiveKit Agent: $LOG_DIR/agent.log"
+    if [ -f "$LOG_DIR/redis.log" ]; then
+        echo -e "  • Redis:        $LOG_DIR/redis.log"
+    fi
     if [ -f "$LOG_DIR/livekit.log" ]; then
         echo -e "  • LiveKit:      $LOG_DIR/livekit.log"
     fi
@@ -564,6 +682,7 @@ main() {
     # Check prerequisites
     check_environment
     check_supabase
+    check_redis
     check_livekit
     
     # Set HuggingFace mirror for Chinese users (improves model download speed)
@@ -610,7 +729,7 @@ case "${1:-}" in
         echo "  ./start-dev.sh stop <service>  Stop specific service"
         echo "  ./start-dev.sh status   Show services status"
         echo ""
-        echo "Available services for stop: web, api, stt, diarization"
+        echo "Available services for stop: web, api, stt, diarization, redis"
         echo ""
         exit 0
         ;;

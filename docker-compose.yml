@@ -1,5 +1,5 @@
-# Production Docker Compose Configuration
-# Optimized for production deployment
+# Intrascribe Microservices Architecture
+# Complete Docker Compose setup for all services
 
 version: '3.8'
 
@@ -7,13 +7,12 @@ services:
   # Redis - Message broker and cache
   redis:
     image: docker.xuanyuan.me/library/redis:7-alpine
-    container_name: intrascribe-redis-prod
-    restart: unless-stopped
+    container_name: intrascribe-redis
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    command: redis-server --appendonly yes
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -24,9 +23,10 @@ services:
 
   # STT Microservice
   stt-service:
-    image: intrascribe/stt-service:latest
-    container_name: intrascribe-stt-prod
-    restart: unless-stopped
+    build:
+      context: ./backend
+      dockerfile: ./stt_service/Dockerfile
+    container_name: intrascribe-stt
     ports:
       - "8001:8001"
     environment:
@@ -44,24 +44,23 @@ services:
       interval: 30s
       timeout: 30s
       retries: 3
-      start_period: 120s  # Allow time for model loading
+      start_period: 60s  # Allow time for model loading
     deploy:
       resources:
-        limits:
-          memory: 8G
         reservations:
           devices:
             - driver: nvidia
-              count: 1
+              count: 1  # GPU support for STT models
               capabilities: [gpu]
     networks:
       - intrascribe-network
 
   # Speaker Diarization Microservice
   diarization-service:
-    image: intrascribe/diarization-service:latest
-    container_name: intrascribe-diarization-prod
-    restart: unless-stopped
+    build:
+      context: ./backend
+      dockerfile: ./diarization_service/Dockerfile
+    container_name: intrascribe-diarization
     ports:
       - "8002:8002"
     environment:
@@ -79,24 +78,25 @@ services:
       interval: 30s
       timeout: 30s
       retries: 3
-      start_period: 120s  # Allow time for model loading
+      start_period: 60s  # Allow time for model loading
     deploy:
       resources:
-        limits:
-          memory: 8G
         reservations:
           devices:
             - driver: nvidia
-              count: 1
+              count: 1  # GPU support for speaker models
               capabilities: [gpu]
     networks:
       - intrascribe-network
 
+  # AI services are integrated into the main API service
+
   # Main API Service
   api-service:
-    image: intrascribe/api-service:latest
-    container_name: intrascribe-api-prod
-    restart: unless-stopped
+    build:
+      context: ./backend
+      dockerfile: ./api_service/Dockerfile
+    container_name: intrascribe-api
     ports:
       - "8000:8000"
     environment:
@@ -125,21 +125,17 @@ services:
       interval: 30s
       timeout: 30s
       retries: 3
-    deploy:
-      resources:
-        limits:
-          memory: 4G
     networks:
       - intrascribe-network
 
-  # Agent Service (production scaling)
+  # Agent Service (scales to 0 by default, started on demand)
   agent-service:
-    image: intrascribe/agent-service:latest
-    container_name: intrascribe-agent-prod
-    restart: unless-stopped
+    build:
+      context: ./backend
+      dockerfile: ./agent_service/transcribe_agent/Dockerfile
+    container_name: intrascribe-agent
     environment:
       - LIVEKIT_API_URL=${LIVEKIT_API_URL}
-      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
       - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
@@ -156,10 +152,36 @@ services:
       api-service:
         condition: service_healthy
     deploy:
-      resources:
-        limits:
-          memory: 2G
-      replicas: 2  # Scale for production
+      replicas: 0  # Start manually when needed
+    networks:
+      - intrascribe-network
+
+  # Next.js Web Application
+  web-app:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: intrascribe-web
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - DOCKER_ENV=true
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - NEXT_PUBLIC_LIVEKIT_URL=${LIVEKIT_API_URL}
+      - BACKEND_URL=http://api-service:8000
+      - SUPABASE_URL=http://host.docker.internal:54321
+    depends_on:
+      api-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 30s
+      retries: 3
+      start_period: 10s
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - intrascribe-network
 

@@ -24,7 +24,7 @@ services:
   # STT Microservice
   stt-service:
     build:
-      context: .
+      context: ./backend
       dockerfile: ./stt_service/Dockerfile
     container_name: intrascribe-stt
     ports:
@@ -58,7 +58,7 @@ services:
   # Speaker Diarization Microservice
   diarization-service:
     build:
-      context: .
+      context: ./backend
       dockerfile: ./diarization_service/Dockerfile
     container_name: intrascribe-diarization
     ports:
@@ -94,7 +94,7 @@ services:
   # Main API Service
   api-service:
     build:
-      context: .
+      context: ./backend
       dockerfile: ./api_service/Dockerfile
     container_name: intrascribe-api
     ports:
@@ -131,7 +131,7 @@ services:
   # Agent Service (scales to 0 by default, started on demand)
   agent-service:
     build:
-      context: .
+      context: ./backend
       dockerfile: ./agent_service/transcribe_agent/Dockerfile
     container_name: intrascribe-agent
     environment:
@@ -159,7 +159,7 @@ services:
   # Next.js Web Application
   web-app:
     build:
-      context: ../web
+      context: ./web
       dockerfile: Dockerfile
     container_name: intrascribe-web
     ports:
