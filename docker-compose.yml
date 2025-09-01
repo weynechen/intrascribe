@@ -1,0 +1,202 @@
+# Intrascribe Microservices Architecture
+# Complete Docker Compose setup for all services
+
+version: '3.8'
+
+services:
+  # Redis - Message broker and cache
+  redis:
+    image: docker.xuanyuan.me/library/redis:7-alpine
+    container_name: intrascribe-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - intrascribe-network
+
+  # STT Microservice
+  stt-service:
+    build:
+      context: ./backend
+      dockerfile: ./stt_service/Dockerfile
+    container_name: intrascribe-stt
+    ports:
+      - "8001:8001"
+    environment:
+      - STT_MODEL_DIR=iic/SenseVoiceSmall
+      - STT_OUTPUT_DIR=/tmp/audio
+      - LOG_LEVEL=INFO
+    volumes:
+      - stt_models:/app/models
+      - temp_audio:/tmp/audio
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 30s
+      retries: 3
+      start_period: 60s  # Allow time for model loading
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1  # GPU support for STT models
+              capabilities: [gpu]
+    networks:
+      - intrascribe-network
+
+  # Speaker Diarization Microservice
+  diarization-service:
+    build:
+      context: ./backend
+      dockerfile: ./diarization_service/Dockerfile
+    container_name: intrascribe-diarization
+    ports:
+      - "8002:8002"
+    environment:
+      - HUGGINGFACE_TOKEN=${HUGGINGFACE_TOKEN}
+      - PYANNOTE_MODEL=pyannote/speaker-diarization-3.1
+      - MIN_SEGMENT_DURATION=1.0
+      - LOG_LEVEL=INFO
+    volumes:
+      - speaker_models:/app/models
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 30s
+      retries: 3
+      start_period: 60s  # Allow time for model loading
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1  # GPU support for speaker models
+              capabilities: [gpu]
+    networks:
+      - intrascribe-network
+
+  # AI services are integrated into the main API service
+
+  # Main API Service
+  api-service:
+    build:
+      context: ./backend
+      dockerfile: ./api_service/Dockerfile
+    container_name: intrascribe-api
+    ports:
+      - "8000:8000"
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - STT_SERVICE_URL=http://stt-service:8001
+      - SPEAKER_SERVICE_URL=http://diarization-service:8002
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - LIVEKIT_API_URL=${LIVEKIT_API_URL}
+      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
+      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
+      - LOG_LEVEL=INFO
+    depends_on:
+      redis:
+        condition: service_healthy
+      stt-service:
+        condition: service_healthy
+      diarization-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 30s
+      retries: 3
+    networks:
+      - intrascribe-network
+
+  # Agent Service (scales to 0 by default, started on demand)
+  agent-service:
+    build:
+      context: ./backend
+      dockerfile: ./agent_service/transcribe_agent/Dockerfile
+    container_name: intrascribe-agent
+    environment:
+      - LIVEKIT_API_URL=${LIVEKIT_API_URL}
+      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - STT_SERVICE_URL=http://stt-service:8001
+      - API_SERVICE_URL=http://api-service:8000
+      - LOG_LEVEL=INFO
+    depends_on:
+      redis:
+        condition: service_healthy
+      stt-service:
+        condition: service_healthy
+      diarization-service:
+        condition: service_healthy
+      api-service:
+        condition: service_healthy
+    deploy:
+      replicas: 0  # Start manually when needed
+    networks:
+      - intrascribe-network
+
+  # Next.js Web Application
+  web-app:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: intrascribe-web
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - DOCKER_ENV=true
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - NEXT_PUBLIC_LIVEKIT_URL=${LIVEKIT_API_URL}
+      - BACKEND_URL=http://api-service:8000
+      - SUPABASE_URL=http://host.docker.internal:54321
+    depends_on:
+      api-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 30s
+      retries: 3
+      start_period: 10s
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - intrascribe-network
+
+# Volumes for persistent data
+volumes:
+  redis_data:
+    driver: local
+  stt_models:
+    driver: local
+  speaker_models:
+    driver: local
+  temp_audio:
+    driver: local
+
+# Network for service communication
+networks:
+  intrascribe-network:
+    driver: bridge

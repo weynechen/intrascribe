@@ -15,6 +15,7 @@ interface HeaderProps {
   onAudioTimeUpdate?: (currentTime: number) => void
   onAudioSeekTo?: (time: number) => void
   onRefreshSessions?: () => void
+  onRefreshAudio?: () => Promise<void>
   apiClient?: unknown
 }
 
@@ -26,6 +27,7 @@ export function Header({
   onAudioTimeUpdate,
   onAudioSeekTo,
   onRefreshSessions,
+  onRefreshAudio,
   apiClient
 }: HeaderProps) {
   const [audioUrl, setAudioUrl] = useState<string>()
@@ -42,6 +44,14 @@ export function Header({
   // 检查会话是否有音频文件
   const checkSessionAudio = useCallback(async (sessionId: string) => {
     try {
+      // 如果sessionId为空，直接返回
+      if (!sessionId) {
+        console.log('⚠️ sessionId为空，跳过音频文件检查')
+        return
+      }
+      
+      console.log('🔍 检查会话音频文件:', sessionId)
+
       // 使用useAuth中的session获取token
       const token = session?.access_token
 
@@ -50,13 +60,21 @@ export function Header({
           ...(token && { 'Authorization': `Bearer ${token}` })
         }
       })
-      console.log('token', token)
+      
+      console.log('🌐 Audio files API响应:', {
+        status: response.status,
+        statusText: response.statusText,
+        sessionId: sessionId,
+        hasToken: !!token
+      })
       
       if (response.ok) {
         const data = await response.json()
+        console.log('📊 Audio files数据:', data)
         
         if (data && data.length > 0) {
           const audioFile = data[0] // 取第一个音频文件
+          console.log('📁 找到音频文件:', audioFile)
           
           // 将原始URL转换为通过代理访问的URL
           const originalUrl = audioFile.public_url
@@ -72,14 +90,21 @@ export function Header({
           
           setAudioUrl(proxyUrl)
           setHasAudio(true)
-          console.log('✅ 音频URL已获取:', proxyUrl, '(原始URL:', originalUrl, ')')
+          console.log('✅ 音频URL已设置:', proxyUrl, '(原始URL:', originalUrl, ')')
         } else {
+          console.log('📭 该会话暂无音频文件')
           setHasAudio(false)
           setAudioUrl(undefined)
         }
+      } else {
+        console.error('❌ 获取音频文件API失败:', response.status, response.statusText)
+        setHasAudio(false)
+        setAudioUrl(undefined)
       }
     } catch (error) {
       console.error('❌ 获取音频文件失败:', error)
+      setHasAudio(false)
+      setAudioUrl(undefined)
     }
   }, [session?.access_token])
 
@@ -180,7 +205,7 @@ export function Header({
       
       // Direct call to backend API with proper authentication
       // Note: Don't set Content-Type header for FormData, browser will set it automatically
-      const response = await fetch('/api/v1/batch-transcription', {
+      const response = await fetch('/api/v1/transcriptions/batch', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -244,13 +269,30 @@ export function Header({
   useEffect(() => {
     if (wasRecordingRef.current && !isRecording && sessionId) {
       // 录音刚结束，等待一下后重新检查音频文件
+      console.log('🔄 录音结束，将在5秒后重新检查音频文件:', sessionId)
       setTimeout(() => {
+        console.log('🔍 开始重新检查音频文件:', sessionId)
         checkSessionAudio(sessionId)
-      }, 2000) // 等待2秒确保finalize session完成
+      }, 5000) // 等待5秒确保finalize session完成
     }
     
     wasRecordingRef.current = isRecording
   }, [isRecording, sessionId, checkSessionAudio])
+
+  // 暴露刷新音频文件的方法
+  const refreshAudioFiles = useCallback(async () => {
+    if (sessionId) {
+      console.log('🔄 手动刷新音频文件:', sessionId)
+      await checkSessionAudio(sessionId)
+    }
+  }, [sessionId, checkSessionAudio])
+  
+  // 当父组件请求刷新音频时
+  useEffect(() => {
+    if (onRefreshAudio) {
+      onRefreshAudio.current = refreshAudioFiles
+    }
+  }, [refreshAudioFiles, onRefreshAudio])
 
   return (
     <div className="h-16 bg-white border-b border-gray-200 px-6 flex items-center flex-shrink-0">

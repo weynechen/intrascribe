@@ -54,7 +54,8 @@ export default function HomePage() {
     deleteSession,
     generateSummary,
     generateTitle,
-    fetchSessions
+    fetchSessions,
+    finalizeSession
   } = useRecordingSessions()
   
   // 创建APIClient实例用于批量转录
@@ -90,6 +91,9 @@ export default function HomePage() {
   
   // 添加当前录音会话ID状态
   const [currentRecordingSessionId, setCurrentRecordingSessionId] = useState<string>('')
+  
+  // 音频刷新ref
+  const refreshAudioRef = useRef<(() => Promise<void>) | null>(null)
   
   // 模板选择状态 - 暂时移除未使用的状态
   // const [selectedTemplateId, setSelectedTemplateId] = useState<string | undefined>()
@@ -134,7 +138,7 @@ export default function HomePage() {
     }
   }, [currentRecordingSessionId])
 
-  const handleRecordingStateChange = useCallback((recording: boolean) => {
+  const handleRecordingStateChange = useCallback(async (recording: boolean) => {
     console.log('🎙️录音状态变化:', recording)
     setIsRecording(recording)
     
@@ -149,13 +153,37 @@ export default function HomePage() {
       setShowAISummaryPanel(false)
       // 不清空selectedSessionId，让用户可以看到当前选中的会话
     } else {
-      // 录音结束 - 提示用户正在进行批量重新处理
+      // 录音结束 - 调用finalize session保存转录数据
       console.log('🏁 录音已结束，准备处理数据')
-      toast.info('录音已结束，正在重新识别说话人和内容，请稍候...', {
+      toast.info('录音已结束，正在保存转录数据...', {
         duration: 5000
       })
       
-      // 简化：仅一次延迟刷新，配合 finalize 的后端处理完成
+      // 调用finalize session将Redis数据保存到数据库
+      if (currentRecordingSessionId) {
+        try {
+          console.log('📁 开始完成会话并保存转录数据:', currentRecordingSessionId)
+          await finalizeSession(currentRecordingSessionId)
+          console.log('✅ 会话完成，转录数据已保存')
+          toast.success('转录数据已保存到数据库')
+          
+          // 等待一下，然后手动刷新音频文件
+          setTimeout(async () => {
+            if (refreshAudioRef.current) {
+              console.log('🔄 触发音频文件刷新')
+              await refreshAudioRef.current()
+            }
+          }, 3000)
+          
+        } catch (error) {
+          console.error('❌ 完成会话失败:', error)
+          toast.error('保存转录数据失败，但实时数据仍可用')
+        }
+      } else {
+        console.warn('⚠️ 录音结束但没有当前录音会话ID')
+      }
+      
+      // 刷新会话数据获取最新状态
       setTimeout(() => {
         try {
           fetchSessions(true)
@@ -168,14 +196,22 @@ export default function HomePage() {
         setCurrentRecordingSessionId('')
       }, 2000) // 给数据更新一些时间
     }
-  }, [fetchSessions])
+  }, [fetchSessions, finalizeSession, currentRecordingSessionId])
 
   // 处理录音会话创建
-  const handleSessionCreated = useCallback((sessionId: string) => {
-    console.log('🎤 录音会话已创建:', sessionId)
-    setCurrentRecordingSessionId(sessionId)
+  const handleSessionCreated = useCallback((roomName: string) => {
+    console.log('🎤 录音会话已创建:', roomName)
+    
+    // 从room name中提取真正的session ID
+    let actualSessionId = roomName
+    if (roomName.startsWith('intrascribe_room_')) {
+      actualSessionId = roomName.replace('intrascribe_room_', '')
+    }
+    
+    console.log('📋 提取的会话ID:', actualSessionId)
+    setCurrentRecordingSessionId(actualSessionId)
     // 自动选中新创建的会话
-    setSelectedSessionId(sessionId)
+    setSelectedSessionId(actualSessionId)
     
     // 简化：依赖实时订阅的 INSERT/UPDATE 事件自动更新
   }, [fetchSessions])
@@ -588,7 +624,7 @@ export default function HomePage() {
         aiSummary: aiSummary?.summary || '',
         aiTitle: session.title || '新建录音',
         status: session.status,
-        templateId: 'default' // 模板ID字段，暂时使用默认值
+        templateId: session.template_id || undefined // 使用真实的模板ID
       }
       
       return recording
@@ -1142,6 +1178,7 @@ export default function HomePage() {
                 onAudioTimeUpdate={handleAudioTimeUpdate}
                 onAudioSeekTo={handleSeekToTime}
                 onRefreshSessions={handleRefreshSessions}
+                onRefreshAudio={refreshAudioRef}
                 apiClient={apiClient}
               />
               <div className="flex flex-1 min-h-0">

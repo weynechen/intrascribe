@@ -13,3 +13,4 @@ wheels/
 .next
 *.pem
 node_modules
+logs/

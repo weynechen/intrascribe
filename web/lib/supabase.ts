@@ -1,4 +1,12 @@
 import { createClient } from '@supabase/supabase-js'
+import {
+  SyncResponse, AsyncResponse, TaskStatusResponse,
+  SessionCreateResponse, SessionDeleteResponse, SessionFinalizeResponse,
+  AsyncAIResponse, AsyncTranscriptionResponse,
+  AISummaryResponse, AISummaryData,
+  isAsyncResponse, isSyncResponse, isTaskStatusResponse,
+  getTaskStatus
+} from './api-types'
 
 // 始终使用Next.js代理，无论HTTP还是HTTPS都能正常工作
 const supabaseUrl = typeof window !== 'undefined' 
@@ -400,6 +408,7 @@ export interface RecordingSession {
   status: 'created' | 'recording' | 'processing' | 'completed' | 'failed' | 'cancelled'
   language: string
   stt_model?: string
+  template_id?: string
   started_at?: string
   ended_at?: string
   duration_seconds?: number
@@ -582,11 +591,19 @@ export class APIClient {
     const token = this.getAuthToken()
     const url = `${this.baseURL}${endpoint}`
     
+    // 确保URL是相对路径，强制通过Next.js代理
+    const finalUrl = url.startsWith('/') ? url : `/${url}`
+    
     console.log('🌐 API请求调试:', {
-      url,
+      originalUrl: url,
+      finalUrl,
       method: options.method || 'GET',
       hasToken: !!token,
-      tokenPreview: token ? `${token.substring(0, 20)}...` : null
+      tokenPreview: token ? `${token.substring(0, 20)}...` : null,
+      tokenLength: token ? token.length : 0,
+      endpoint,
+      baseURL: this.baseURL,
+      windowOrigin: typeof window !== 'undefined' ? window.location.origin : 'server-side'
     })
     
     const config: RequestInit = {
@@ -598,10 +615,11 @@ export class APIClient {
       },
     }
 
-    const response = await fetch(url, config)
+    const response = await fetch(finalUrl, config)
     
     console.log('📡 API响应调试:', {
-      url,
+      requestedUrl: finalUrl,
+      responseUrl: response.url,
       status: response.status,
       statusText: response.statusText,
       ok: response.ok
@@ -618,7 +636,7 @@ export class APIClient {
 
   // 会话管理
   async createSession(title: string, language: string = 'zh-CN', sttModel: string = 'whisper'): Promise<SessionCreateResponse> {
-    return this.request<SessionCreateResponse>('/sessions', {
+    const response = await this.request<SessionCreateResponse>('/sessions', {
       method: 'POST',
       body: JSON.stringify({
         title,
@@ -626,34 +644,236 @@ export class APIClient {
         stt_model: sttModel
       })
     })
+    
+    // 检查响应格式并适配
+    if (isSyncResponse(response)) {
+      // 新的统一响应格式
+      return response
+    } else {
+      // 兼容旧格式，包装成新格式
+      return {
+        success: true,
+        message: "会话创建成功",
+        timestamp: new Date().toISOString(),
+        data: response as any
+      }
+    }
   }
 
   async finalizeSession(sessionId: string): Promise<SessionFinalizeResponse> {
-    return this.request<SessionFinalizeResponse>(`/sessions/${sessionId}/finalize`, {
-      method: 'POST'
+    // 使用V2 API - 直接处理同步响应
+    const baseURL = this.baseURL.replace('/v1', '') // 移除v1，直接访问v2
+    
+    const response = await fetch(`${baseURL}/v2/sessions/${sessionId}/finalize`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.getAuthToken()}`
+      }
     })
+
+    if (!response.ok) {
+      throw new Error(`会话结束失败: ${response.status}`)
+    }
+
+    const data = await response.json()
+    console.log('✅ V2会话结束完成:', data)
+
+    // 检查是否是异步任务响应
+    if (data.task_id && data.status === "started") {
+      // 异步任务，需要轮询
+      const result = await this.pollV2TaskStatus(data.task_id)
+      return {
+        message: "Session finalized successfully.",
+        session_id: sessionId,
+        status: "completed",
+        final_data: result
+      }
+    } else {
+      // 同步响应，直接返回
+      return {
+        message: data.message || "Session finalized successfully.",
+        session_id: sessionId,
+        status: "completed",
+        final_data: data.result || {
+          total_duration_seconds: 0,
+          transcription_saved: true
+        }
+      }
+    }
   }
 
-  async deleteSession(sessionId: string): Promise<{ message: string; session_id: string; deleted: boolean }> {
-    return this.request<{ message: string; session_id: string; deleted: boolean }>(`/sessions/${sessionId}`, {
+  async deleteSession(sessionId: string): Promise<SessionDeleteResponse> {
+    const response = await this.request<SessionDeleteResponse>(`/sessions/${sessionId}`, {
       method: 'DELETE'
     })
+    
+    // 检查响应格式并适配
+    if (isSyncResponse(response)) {
+      // 新的统一响应格式
+      return response
+    } else {
+      // 兼容旧格式，包装成新格式
+      return {
+        success: true,
+        message: "会话删除成功",
+        timestamp: new Date().toISOString(),
+        data: {
+          session_id: sessionId,
+          deleted: true
+        }
+      }
+    }
   }
 
   async getSession(sessionId: string): Promise<RecordingSession> {
     return this.request<RecordingSession>(`/sessions/${sessionId}`)
   }
 
-  // AI 服务
-  async generateSummary(transcription: string): Promise<AISummaryResponse> {
-    return this.request<AISummaryResponse>('/summarize', {
+  // 响应格式检测和处理
+  private isAsyncResponse(response: any): boolean {
+    return response && typeof response === 'object' && 
+           'task_id' in response && 'poll_url' in response
+  }
+  
+  private isSyncResponse(response: any): boolean {
+    return response && typeof response === 'object' && 
+           'data' in response && !('task_id' in response)
+  }
+
+  // AI 服务 - 统一响应处理
+  async generateSummary(transcription: string, sessionId: string, templateId?: string): Promise<AISummaryResponse> {
+    // 调用基于session的summarize API
+    const baseURL = this.baseURL.replace('/v1', '') // 移除v1，直接访问v2
+    
+    const response = await fetch(`${baseURL}/v2/sessions/${sessionId}/summarize`, {
       method: 'POST',
-      body: JSON.stringify({ transcription })
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.getAuthToken()}`
+      },
+      body: JSON.stringify({
+        transcription_text: transcription,
+        ...(templateId && { template_id: templateId })
+      })
     })
+    
+    if (!response.ok) {
+      throw new Error(`Summary generation failed: ${response.status}`)
+    }
+    
+    const data = await response.json()
+    
+    // 检查是否是异步响应
+    if (this.isAsyncResponse(data)) {
+      console.log('🔄 检测到异步响应，开始轮询:', data.task_id)
+      const result = await this.pollV2TaskStatus(data.task_id)
+      return {
+        summary: result.summary,
+        key_points: result.key_points || [],
+        metadata: result.metadata || {}
+      }
+    } else {
+      // 直接返回同步响应
+      console.log('✅ 收到同步响应')
+      return {
+        summary: data.summary,
+        key_points: data.key_points || [],
+        metadata: data.metadata || {}
+      }
+    }
+  }
+
+  // 轮询V2任务状态的辅助方法
+  private async pollV2TaskStatus(taskId: string, maxAttempts: number = 120): Promise<any> {
+    const baseURL = this.baseURL.replace('/v1', '') // 移除v1，直接访问v2
+    
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        const response = await fetch(`${baseURL}/v2/tasks/${taskId}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.getAuthToken()}`
+          }
+        })
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`)
+        }
+
+        const taskStatusResponse: TaskStatusResponse = await response.json()
+        console.log(`🔄 V2任务状态轮询 ${attempt + 1}/${maxAttempts}:`, taskStatusResponse.status)
+
+        // 使用新的类型守卫和工具函数
+        if (isTaskStatusResponse(taskStatusResponse)) {
+          const status = getTaskStatus(taskStatusResponse)
+          
+          // 任务完成
+          if (status.isCompleted && taskStatusResponse.result) {
+            console.log('✅ V2任务完成，返回结果')
+            return taskStatusResponse.result
+          }
+
+          // 任务失败
+          if (status.isFailed) {
+            console.error('❌ V2任务失败:', taskStatusResponse.error)
+            throw new Error(taskStatusResponse.error || '任务执行失败')
+          }
+
+          // 任务被取消
+          if (status.isCancelled) {
+            console.warn('⚠️ V2任务被取消')
+            throw new Error('任务被取消')
+          }
+
+          // 任务仍在进行中
+          if (status.isPending) {
+            console.log('⏳ V2任务进行中:', taskStatusResponse.progress)
+            await new Promise(resolve => setTimeout(resolve, 3000))
+            continue
+          }
+        } else {
+          // 兼容旧的响应格式
+          if (taskStatusResponse.status === 'success' && (taskStatusResponse as any).result) {
+            return (taskStatusResponse as any).result
+          }
+          
+          if (taskStatusResponse.status === 'failure') {
+            throw new Error(taskStatusResponse.error || '任务执行失败')
+          }
+        }
+        
+        console.warn('⚠️ 未知任务状态:', taskStatusResponse.status)
+        
+      } catch (error) {
+        console.error(`❌ V2任务状态查询失败 (第${attempt + 1}次):`, error)
+        
+        // 如果是认证错误，立即重试而不是等待太多次
+        if (error instanceof Error && error.message.includes('403')) {
+          console.warn('🔑 检测到认证错误，快速重试...')
+          if (attempt >= 5) { // 认证错误只重试5次
+            throw new Error(`认证失败，请重新登录: ${error.message}`)
+          }
+          await new Promise(resolve => setTimeout(resolve, 1000)) // 认证错误时短暂等待
+          continue
+        }
+        
+        // 其他错误的处理：最后几次尝试时抛出错误
+        if (attempt >= maxAttempts - 3) {
+          throw error
+        }
+        
+        // 等待后重试
+        await new Promise(resolve => setTimeout(resolve, 3000))
+      }
+    }
+
+    throw new Error(`V2任务轮询超时 (${maxAttempts} 次尝试)`)
   }
 
   async generateSessionSummary(sessionId: string, force: boolean = false, templateId?: string): Promise<{ summary: string; metadata: Record<string, unknown> }> {
-    console.log('🌐 APIClient.generateSessionSummary调试:', {
+    console.log('🌐 APIClient.generateSessionSummary V2调试:', {
       sessionId,
       force,
       templateId,
@@ -661,26 +881,81 @@ export class APIClient {
       isTemplateIdString: typeof templateId === 'string'
     })
     
-    const params = new URLSearchParams()
-    if (force) params.append('force', 'true')
-    if (templateId) params.append('template_id', templateId)
-    
-    const queryString = params.toString()
-    console.log('🌐 生成的URL查询字符串:', queryString)
-    
-    return this.request<{ summary: string; metadata: Record<string, unknown> }>(`/sessions/${sessionId}/summarize${queryString ? `?${queryString}` : ''}`, {
-      method: 'POST'
-    })
+    try {
+      const baseURL = this.baseURL.replace('/v1', '') // 移除v1，直接访问v2
+      const token = this.getAuthToken()
+      
+      console.log('🔑 认证调试:', {
+        hasToken: !!token,
+        tokenPreview: token ? `${token.substring(0, 20)}...` : null
+      })
+      
+      if (!token) {
+        throw new Error('用户未认证，无法生成AI总结')
+      }
+      
+      // 直接提交V2异步任务，不需要先获取session（避免额外的API调用和认证问题）
+      const taskResponse = await fetch(`${baseURL}/v2/sessions/${sessionId}/ai-summary`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          template_id: templateId || null
+        })
+      })
+
+      console.log('📡 AI总结任务提交响应:', {
+        status: taskResponse.status,
+        statusText: taskResponse.statusText,
+        ok: taskResponse.ok
+      })
+
+      if (!taskResponse.ok) {
+        const errorData = await taskResponse.json().catch(() => ({}))
+        console.error('❌ 提交AI总结任务失败:', errorData)
+        throw new Error(`提交AI总结任务失败: ${taskResponse.status} - ${errorData.detail || taskResponse.statusText}`)
+      }
+
+      const taskData = await taskResponse.json()
+      console.log('✅ V2 AI总结任务已提交:', taskData.task_id)
+
+      // 轮询任务状态
+      const result = await this.pollV2TaskStatus(taskData.task_id)
+      console.log('✅ V2 AI总结生成完成')
+
+      return {
+        summary: result.summary,
+        metadata: { generated_by: 'v2_async_task' }
+      }
+    } catch (error) {
+      console.error('V2 AI总结生成失败:', error)
+      throw error
+    }
   }
 
-  async generateTitle(transcription: string, summary?: string): Promise<AITitleResponse> {
-    return this.request<AITitleResponse>('/generate-title', {
+  async generateTitle(sessionId: string, transcription: string, summary?: string): Promise<AITitleResponse> {
+    // 调用基于session的generate-title API
+    const baseURL = this.baseURL.replace('/v1', '') // 移除v1，直接访问v2
+    
+    const response = await fetch(`${baseURL}/v2/sessions/${sessionId}/generate-title`, {
       method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.getAuthToken()}`
+      },
       body: JSON.stringify({
-        transcription,
-        ...(summary && { summary })
+        transcription_text: transcription,
+        summary_text: summary
       })
     })
+    
+    if (!response.ok) {
+      throw new Error(`Title generation failed: ${response.status}`)
+    }
+    
+    return response.json()
   }
 
   // 转录管理
@@ -695,7 +970,20 @@ export class APIClient {
 
   // 模板管理
   async getTemplates(): Promise<SummaryTemplate[]> {
-    return this.request<SummaryTemplate[]>('/templates')
+    const token = this.getAuthToken()
+    
+    console.log('🔑 模板加载认证调试:', {
+      hasToken: !!token,
+      tokenPreview: token ? `${token.substring(0, 20)}...` : null,
+      tokenLength: token ? token.length : 0,
+      baseURL: this.baseURL
+    })
+    
+    if (!token) {
+      throw new Error('用户未认证，无法加载模板')
+    }
+    
+    return this.request<SummaryTemplate[]>('/templates/')
   }
 
   async createTemplate(template: CreateTemplateRequest): Promise<SummaryTemplate> {
@@ -723,17 +1011,76 @@ export class APIClient {
   }
 
   // 更新会话模板选择
-  async updateSessionTemplate(sessionId: string, templateId: string): Promise<{ message: string; session_id: string; template_id: string }> {
+  async updateSessionTemplate(sessionId: string, templateId: string | null): Promise<{ message: string; session_id: string; template_id: string }> {
+    // 转换空字符串为null，避免后端UUID错误
+    const finalTemplateId = (!templateId || templateId === '' || templateId === 'no-template') ? null : templateId
+    
+    console.log('🔧 updateSessionTemplate调试:', {
+      original: templateId,
+      final: finalTemplateId,
+      originalType: typeof templateId,
+      finalType: typeof finalTemplateId
+    })
+    
     return this.request<{ message: string; session_id: string; template_id: string }>(`/sessions/${sessionId}/template`, {
       method: 'PUT',
-      body: JSON.stringify({ template_id: templateId })
+      body: JSON.stringify({ template_id: finalTemplateId })
     })
   }
 
   // 重新转录会话
-  async retranscribeSession(sessionId: string): Promise<{ success: boolean; message: string; session_id: string; status: string }> {
-    return this.request<{ success: boolean; message: string; session_id: string; status: string }>(`/sessions/${sessionId}/retranscribe`, {
-      method: 'POST'
-    })
+  async retranscribeSession(sessionId: string): Promise<{ success: boolean; message: string; session_id: string; status: string; task_id?: string }> {
+    try {
+      // 使用V2异步API - 返回task_id
+      const baseURL = this.baseURL.replace('/v1', '') // 移除v1，直接访问v2
+      
+      const taskResponse = await fetch(`${baseURL}/v2/sessions/${sessionId}/retranscribe`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.getAuthToken()}`
+        }
+      })
+
+      if (!taskResponse.ok) {
+        throw new Error(`重新转录失败: ${taskResponse.status}`)
+      }
+
+      const taskData = await taskResponse.json()
+      console.log('✅ V2重新转录任务已提交:', taskData.task_id)
+
+      // 启动异步轮询，但不等待完成就返回
+      this.pollV2TaskStatus(taskData.task_id).then(result => {
+        console.log('✅ V2重新转录完成:', result)
+      }).catch(error => {
+        console.error('❌ V2重新转录失败:', error)
+      })
+
+      // 立即返回任务信息
+      return {
+        success: true,
+        message: "重新转录任务已提交，正在后台处理",
+        session_id: sessionId,
+        status: "processing",
+        task_id: taskData.task_id
+      }
+      
+    } catch (error) {
+      console.error('重新转录API调用失败，回退到V1:', error)
+      
+      // 回退到V1同步API（如果V2不可用）
+      try {
+        return await this.request<{ success: boolean; message: string; session_id: string; status: string }>(`/sessions/${sessionId}/retranscribe`, {
+          method: 'POST'
+        })
+      } catch (v1Error) {
+        return {
+          success: false,
+          message: "重新转录功能暂时不可用",
+          session_id: sessionId,
+          status: "failed"
+        }
+      }
+    }
   }
 } 

@@ -3,48 +3,89 @@ import { NextRequest, NextResponse } from 'next/server'
 // 后端服务的基础URL
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000'
 
+// 轮询任务状态的辅助函数
+async function pollTaskStatus(taskId: string, maxAttempts: number = 120): Promise<any> {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const statusResponse = await fetch(`${BACKEND_URL}/api/v2/tasks/${taskId}`)
+    
+    if (!statusResponse.ok) {
+      throw new Error(`获取任务状态失败: ${statusResponse.status}`)
+    }
+    
+    const status = await statusResponse.json()
+    console.log(`📊 任务状态检查 (${attempt + 1}/${maxAttempts}):`, status.status)
+    
+    if (status.ready) {
+      if (status.successful) {
+        return status.result
+      } else {
+        throw new Error(status.error || '任务执行失败')
+      }
+    }
+    
+    // 等待3秒后继续轮询
+    await new Promise(resolve => setTimeout(resolve, 3000))
+  }
+  
+  throw new Error('任务处理超时')
+}
+
 export async function POST(request: NextRequest) {
   try {
     console.log('📥 收到AI总结请求')
-    const { transcription } = await request.json()
+    const { transcription, sessionId, templateId } = await request.json()
     console.log('📝 转录内容长度:', transcription?.length || 0)
 
-    if (!transcription) {
-      console.log('❌ 缺少转录内容')
+    if (!transcription || !sessionId) {
+      console.log('❌ 缺少必要参数')
       return NextResponse.json(
-        { error: '缺少文本内容' },
+        { error: '缺少转录内容或会话ID' },
         { status: 400 }
       )
     }
 
-    console.log('🔄 调用后端API生成总结...')
-    // 调用后端的真实API接口
-    const response = await fetch(`${BACKEND_URL}/api/summarize`, {
+    console.log('🔄 提交V2异步AI总结任务...')
+    // 调用V2 API提交异步任务
+    const taskResponse = await fetch(`${BACKEND_URL}/api/v2/sessions/${sessionId}/ai-summary`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        // 这里需要添加认证头，实际使用时从request中获取
+        // 'Authorization': `Bearer ${token}`
       },
-      body: JSON.stringify({ transcription }), // 使用transcription字段
+      body: JSON.stringify({ 
+        transcription_text: transcription,
+        template_id: templateId || null
+      })
     })
 
-    console.log('📡 后端API响应状态:', response.status)
+    console.log('📡 后端任务提交响应状态:', taskResponse.status)
 
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.log('❌ 后端API调用失败:', errorText)
-      throw new Error(`后端API调用失败: ${response.status} ${response.statusText}`)
+    if (!taskResponse.ok) {
+      const errorText = await taskResponse.text()
+      console.log('❌ 任务提交失败:', errorText)
+      throw new Error(`任务提交失败: ${taskResponse.status} ${taskResponse.statusText}`)
     }
 
-    const data = await response.json()
-    console.log('✅ AI总结生成成功')
+    const taskData = await taskResponse.json()
+    const taskId = taskData.task_id
+    console.log('✅ 异步任务已提交，任务ID:', taskId)
 
-    // 返回与后端一致的响应格式
-    return NextResponse.json(data)
+    // 轮询任务状态直到完成
+    console.log('⏳ 开始轮询任务状态...')
+    const result = await pollTaskStatus(taskId)
+    console.log('✅ AI总结生成完成')
+
+    // 返回总结结果
+    return NextResponse.json({
+      summary: result.summary,
+      key_points: result.key_points,
+      summary_id: result.summary_id
+    })
 
   } catch (error) {
     console.error('总结生成失败:', error)
     
-    // 如果后端不可用，返回错误信息
     return NextResponse.json(
       { error: `总结生成失败: ${error instanceof Error ? error.message : '未知错误'}` },
       { status: 500 }

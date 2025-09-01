@@ -1,0 +1,27 @@
+[project]
+name = "api-service"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "anthropic>=0.34.0",
+    "fastapi>=0.104.1",
+    "gunicorn>=21.2.0",
+    "httpx>=0.25.2",
+    "librosa>=0.10.1",
+    "litellm>=1.50.0",
+    "livekit>=0.10.1",
+    "livekit-api>=0.10.1",
+    "numpy>=1.24.3",
+    "openai>=1.50.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "python-dotenv>=1.0.0",
+    "pyjwt>=2.8.0",
+    "python-multipart>=0.0.6",
+    "pyyaml>=6.0.1",
+    "redis>=6.4.0",
+    "soundfile>=0.12.1",
+    "supabase>=2.0.0",
+    "tiktoken>=0.7.0",
+    "uvicorn[standard]>=0.24.0",
+]

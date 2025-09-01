@@ -105,7 +105,7 @@ export function AISummaryPanel({
       
       console.log('📤 发送请求到API:', requestBody)
 
-      const response = await fetch(`/api/v1/update_ai_summaries/${summaryId}`, {
+      const response = await fetch(`/api/v2/sessions/${sessionId}/ai-summaries/${summaryId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

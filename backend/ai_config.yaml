@@ -1,0 +1,74 @@
+# AI 总结配置
+ai_summary:
+  # LiteLLM 配置
+  provider: "litellm"
+  
+  # 模型配置 (支持多个模型，按优先级排序)
+  models:
+    - name: "local-model"
+      model: "ollama/qwen3:8b"
+      api_base: "http://localhost:11434"
+      max_tokens: 2000
+      temperature: 0.7
+      priority: 1
+      enabled: true
+      
+    - name: "deepseek-chat"
+      model: "deepseek/deepseek-chat"
+      api_key: "${DEEPSEEK_API_KEY}"
+      api_base: "https://api.deepseek.com"
+      max_tokens: 2000
+      temperature: 0.7
+      priority: 2
+      enabled: false
+      
+    - name: "qwen-turbo"
+      model: "qwen/qwen-turbo"
+      api_key: "${QWEN_API_KEY}"
+      api_base: "https://dashscope.aliyuncs.com/compatible-mode"
+      max_tokens: 2000
+      temperature: 0.7
+      priority: 3
+      enabled: false
+      
+    - name: "gpt-3.5-turbo"
+      model: "openai/gpt-3.5-turbo"
+      api_key: "${OPENAI_API_KEY}"
+      max_tokens: 2000
+      temperature: 0.7
+      priority: 4
+      enabled: false
+
+  # 提示词配置
+  prompts:
+    system_prompt: |
+      你是一个专业的会议记录助手，擅长分析会议转录内容并生成结构化的总结。
+      请根据提供的会议转录内容，生成一份详细的会议总结。
+      
+      总结格式要求：
+      1. 使用Markdown格式
+      2. 包含以下部分：关键讨论要点、行动项目、重要决策、下一步行动、数据洞察
+      3. 提取重要信息并分类整理
+      4. 语言简洁明了，重点突出
+      5. 使用中文输出
+      
+    user_prompt_template: |
+      请对以下会议转录内容进行总结：
+      
+      转录内容：
+      {transcription}
+      
+      请生成一份结构化的会议总结，包含关键要点、行动项目、重要决策等内容。
+      要求：
+      必须仅根据内容总结，不可以捏造。
+
+  # 重试配置
+  retry:
+    max_attempts: 3
+    backoff_factor: 2
+    timeout: 30
+
+  # 回退策略
+  fallback:
+    enabled: true
+    mock_response: true  # 如果所有模型都失败，是否返回模拟响应

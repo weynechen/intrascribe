@@ -1,6 +1,6 @@
-### IntraScribe
+# IntraScribe
 
-面向企业、学校与机关等内网环境的本地优先语音转写与协作平台：支持实时转写、说话人分离、高质量批处理、AI 总结与标题生成。默认提供浏览器 WebRTC 接入与 SSE 实时返回，也支持边缘设备/硬件作为前端，架构解耦、可替换任意采集与传输方案；数据全程留在本地，重视隐私与合规。
+可完全本地化的，面向企业、学校与机关等内网环境的本地优先语音转写与协作平台：支持实时转写、说话人分离、高质量批处理、AI 总结与标题生成。默认提供浏览器 WebRTC 接入与 SSE 实时返回，也支持边缘设备/硬件作为前端，架构解耦、可替换任意采集与传输方案；数据全程留在本地，重视隐私与合规。
 
 点击图片观看bilibili演示视频
 
@@ -10,7 +10,7 @@
 
 ---
 
-### 功能特性
+# 功能特性
 
 - 本地优先与隐私保护：可在内网/离线环境独立部署，数据不外发，满足隐私与合规要求。
 - 团队与组织协作：账号体系、模板共享与编辑流程，适配企业/学校多用户协作。
@@ -27,7 +27,7 @@
 
 ---
 
-### 适用场景
+# 适用场景
 
 - 企业/事业单位内网部署的会议记录与知识沉淀
 - 学校/研究机构的课堂与研讨记录（支持多人与说话人标注）
@@ -36,196 +36,219 @@
 
 ---
 
-### 技术栈
+# 技术栈
 
 - 前端：Next.js (App Router) + React + TypeScript + Tailwind CSS
-- 后端：FastAPI（Python，使用 uv 管理依赖与运行）
-- 实时：默认 WebRTC（浏览器推流）+ SSE（服务端事件流返回转写输出）；架构解耦，可替换其他采集/传输方案
-- ASR：FunASR（本地模型，可 GPU 加速），适配器 `LocalFunASR`
-- 说话人分离：pyannote.audio（需 HuggingFace token登录下载，可 GPU 加速）
-- AI 总结/标题：LiteLLM（可配置多模型与回退策略）
+- 后端架构：微服务架构，基于 FastAPI（Python，使用 uv 管理依赖与运行）
+- 实时音视频：LiveKit WebRTC 平台，支持高质量音频流处理
+- 微服务组件：
+  - **API Service** (8000)：主要业务逻辑、会话管理、AI 服务集成
+  - **STT Service** (8001)：专用语音转文字服务，FunASR 模型（可 GPU 加速）
+  - **Diarization Service** (8002)：专用说话人分离服务，pyannote.audio（可 GPU 加速）
+  - **Agent Service**：轻量级实时音频处理代理，连接 LiveKit 与后端服务
+- 消息与缓存：Redis（服务间通信、实时数据缓存）
+- AI 能力：LiteLLM（集成到 API Service，支持多模型与回退策略）
 - 存储与数据：Supabase（Auth、Postgres、Storage、Realtime）
+- 容器化：Docker Compose 统一管理所有微服务
 - 多媒体工具：FFmpeg（音频转码、分割、信息读取）
 
 ---
 
-### 目录结构
+# 目录结构
 
 ```text
 intrascribe/
-  backend/
-    app/
-      api.py                       # API 路由与端点定义（/api/v1/...）
-      services.py                  # 会话、转写、AI、缓存等业务服务
-      stt_adapter.py               # FunASR 本地模型适配
-      speaker_diarization.py       # 说话人分离服务（pyannote）
-      batch_transcription.py       # 批量转写任务封装
-      audio_processing_service.py  # 通用音频处理（转码、分段等）
-      audio_converter.py           # FFmpeg 封装
-      schemas.py, models.py        # DTO 与领域模型
-      clients.py, repositories.py  # 外部服务与数据访问
-    main_v1.py                     # 实时音频流入口（默认 WebRTC 接入实现）
-    config.yaml                    # AI 总结与 STT 相关配置
-    pyproject.toml                 # 后端依赖
-  web/
-    app/                           # 路由与 API 代理（/app/api/...）
-    components/, hooks/, lib/      # UI、业务组件与 Supabase 客户端
-  supabase/
-    database_schema.sql            # 数据库结构（表、RLS、视图、函数）
-    migrations/20250814090000_all_in_one.sql  # 单文件迁移
+  backend/                        # 微服务后端
+    api_service/                  # 主 API 服务 (端口 8000)
+      routers/                    # API 路由定义（会话、模板、音频等）
+      services/                   # 业务服务层（AI 集成）
+      repositories/               # 数据访问层
+      core/                       # 核心组件（认证、数据库、Redis）
+      schemas.py                  # API 数据模型
+      main.py                     # 服务入口
+      
+    stt_service/                  # 语音转文字微服务 (端口 8001)
+      main.py                     # FunASR 模型服务
+      models.py                   # STT 数据模型
+      
+    diarization_service/          # 说话人分离微服务 (端口 8002)
+      main.py                     # pyannote.audio 模型服务
+      models.py                   # 分离数据模型
+      
+    agent_service/                # LiveKit 代理服务
+      transcribe_agent/           # 实时转写代理
+        agent.py                  # LiveKit 音频处理逻辑
+        
+    shared/                       # 共享组件
+      config.py                   # 通用配置
+      models.py                   # 共享数据模型
+      logging.py                  # 日志配置
+      
+    docker-compose.yml            # 微服务编排
+    ai_config.yaml                # AI 模型配置
+    Makefile                      # 服务管理命令
+    
+  web/                            # 前端应用
+    app/                          # Next.js 路由与 API 代理
+    components/, hooks/, lib/     # UI、业务组件与客户端库
+    
+  supabase/                       # 数据库与认证
+    database_schema.sql           # 数据库结构（表、RLS、视图、函数）
+    migrations/                   # 数据库迁移文件
+    
   README.md
 ```
 
 ---
 
-### 快速开始
+# 快速开始
+当前我仅在ubuntu 22.04上进行开发和测试，其余Linux平台理论上也支持。但windows和mac可能异常较多。
+## 前置条件
 
-#### 1) 前置条件
-以下为ubuntu下的示范：
-
-- nvidia GPU 电脑，cuda升级到最新版本。（理论上也支持纯CPU，但我没有测试过）
+- nvidia GPU 电脑，cuda驱动升级到最新版本。（理论上也支持纯CPU，但我没有测试过）
 - Node.js 18+
-- Python 3.10+ 与 uv（python 包管理/运行器），参考：https://docs.astral.sh/uv/getting-started/installation/#installation-methods 
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
+- Python 3.12 与 uv（python 包管理/运行器），参考：https://docs.astral.sh/uv/getting-started/installation/#installation-methods
 
-- ollama qwen3:8b。（可选其他模型，需要修改 backend/config.yaml文件中的模型配置）
+  ```sh
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  ```
+- ollama qwen3:8b。（可选其他模型，需要修改 backend/ai_config.yaml文件中的模型配置）
 - FFmpeg
-```bash
-sudo apt install ffmpeg
-```
+
+  ```
+  sudo apt install ffmpeg
+  ```
 - supabase。参考链接： https://supabase.com/docs/guides/local-development ，进行安装。
 
+  ```sh
+  npm install supabase --save-dev
+  ```
+  安装过程中，npm 需要从github 下载二进制包，如果一直卡着不动，可手动下载和安装： https://github.com/supabase/cli/releases
+
+- livekit。  https://github.com/livekit/livekit
+
+  ```sh
+  curl -sSL https://get.livekit.io | bash
+  ```
+- redis。 
+
+  ```sh
+  sudo apt install redis-server -y
+  ```
+  安装完成后检查是否在运行：
+
+  ```sh
+  sudo systemctl status redis-server
+  ```
+
+- 访问huggingface，获取自己的token。
+
+## 克隆项目到本地
+随后，将本项目clone到本地。
+
 ```bash
-npm install supabase --save-dev
-```
-
-安装过程中，npm 需要从github 下载二进制包，如果一直卡着不动，可手动下载和安装：
-https://github.com/supabase/cli/releases
-
-
-#### 2) clone项目到本地
-```
 git clone https://github.com/weynechen/intrascribe.git
+cd intrascribe
 ```
 
-#### 3) 启动数据库
 
+## 启动数据库
 ```bash
 cd supabase
-# 启动套件
-supabase start
+# 启动 Supabase 套件
+sudo supabase start -x edge-runtime
 ```
 
-supbase 会下载一系列的docker image，耗时较久，耐心等待。
+Supabase 会下载一系列的 Docker 镜像，耗时较久，请耐心等待。
 
-启动成功后，会出现信息：
+启动成功后，会显示连接信息：
 ```txt
          API URL: http://127.0.0.1:54321
      GraphQL URL: http://127.0.0.1:54321/graphql/v1
-  S3 Storage URL: http://127.0.0.1:54321/storage/v1/s3
+ S3 Storage URL: http://127.0.0.1:54321/storage/v1/s3
           DB URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
       Studio URL: http://127.0.0.1:54323
     Inbucket URL: http://127.0.0.1:54324
       JWT secret: super-secret-jwt-token-with-at-least-32-characters-long
-        anon key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
-service_role key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
-   S3 Access Key: 625729a08b95bf1b7ff351a663f3a23c
-   S3 Secret Key: 850181e4652dd023b7a98c58ae0d2d34bd487ee0cc3254aed6eda37307425907
-       S3 Region: local
+        anon key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+service_role key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
-如果过程中出现502错误（网络问题），可以排除edge-runtime ：
-```bash
-sudo supabase start -x edge-runtime
-```
+
 启动成功后，执行数据库初始化
 ```bash
-# 初始化数据库
 supabase db reset
 ```
 访问 http://127.0.0.1:54323/project/default 查看数据是否存在。
 
-注：reset操作只需操作一次即可，否则数据库会被清理掉。如果需要重启supabase，运行
+注：reset操作只需操作一次即可，否则数据库会被清理掉。
 
+如果需要重启supabase，运行
 ```bash
-cd supabase
 supabase stop
 supabase start
 ```
 
-#### 2) 配置环境变量（请自行创建/修改文件）
-- 前端 `web/.env.local`（示例内容）：
+## 启动livekit-server
+运行 
 ```bash
-NEXT_PUBLIC_SUPABASE_ANON_KEY=你的Supabase匿名Key
+livekit-server --dev
 ```
-- 后端 `backend/.env`（示例内容）：
-```bash
-SUPABASE_URL=你的Supabase项目URL
 
-SUPABASE_ANON_KEY = 你的Supabase匿名Key
-SUPABASE_SERVICE_ROLE_KEY = 你的Supabase ROLE Key
-# 访问：https://huggingface.co/settings/tokens 申请
-HUGGINGFACE_TOKEN=你的huggingface token
-PYANNOTE_MODEL=pyannote/speaker-diarization-3.1
-```
-提示：请根据你的实际部署地址与密钥填写，以上仅为示例。请不要把密钥提交到仓库。
+## 配置前后端的环境变量
+在web页面下有 .env.local.example，将其拷贝为.env.local。同样backend页面下有 .env.example，将其拷贝为.env 。
 
-#### 4) 启动后端（FastAPI）
+随后，修改配置，将其中的 `your-key`和`your-token` 替换成真实的值。
 
-初次运行，会要下载较多的模型文件。国内可设置镜像加快下载速度。
+
+## 使用一键启动脚本
 
 ```bash
-export HF_ENDPOINT=https://hf-mirror.com
-```
-随后运行
+# 启动所有服务
+./start-dev.sh
 
-```bash
-cd backend
-uv sync
-uv run main_v1.py
-```
-默认监听 `http://localhost:8000`。
+# 检查服务状态
+./start-dev.sh status
 
+# 停止所有服务
+./start-dev.sh stop
 
-启动过程需要连接网络，如果网络不好，启动时间会变长，出现如下为启动成功：
-```txt
-2025-08-24 21:54:44,216 - __main__ - INFO -   - [POST] /api/v1/transcriptions
-2025-08-24 21:54:44,216 - __main__ - INFO -   - [PUT] /api/v1/transcriptions/{transcription_id}
-2025-08-24 21:54:44,216 - __main__ - INFO -   - [POST] /api/v1/save_ai_summaries
-2025-08-24 21:54:44,216 - __main__ - INFO -   - [PUT] /api/v1/update_ai_summaries/{summary_id}
-2025-08-24 21:54:44,216 - __main__ - INFO -   - [POST] /api/v1/audio/process
-2025-08-24 21:54:44,216 - __main__ - INFO -   - [POST] /api/v1/audio/session/set
-2025-08-24 21:54:44,216 - __main__ - INFO -   - [GET] /api/v1/audio/session/current
-2025-08-24 21:54:44,217 - __main__ - INFO -   - [POST] /api/v1/batch-transcription
-2025-08-24 21:54:44,217 - __main__ - INFO -   - [GET] /api/v1/audio/cache/status
-2025-08-24 21:54:44,217 - __main__ - INFO -   - [GET] /
-2025-08-24 21:54:44,217 - __main__ - INFO -   - [POST] /webrtc/offer
-2025-08-24 21:54:44,217 - __main__ - INFO -   - [POST] /telephone/incoming
-2025-08-24 21:54:44,217 - __main__ - INFO -   - [POST] /send_input
-2025-08-24 21:54:44,217 - __main__ - INFO -   - [GET] /transcript
-2025-08-24 21:54:44,217 - __main__ - INFO - 🚀 应用启动完成！
-INFO:     Visit https://fastrtc.org/userguide/api/ for WebRTC or Websocket API docs.
-2025-08-24 21:54:44,217 - uvicorn.error - INFO - Application startup complete.
-2025-08-24 21:54:44,217 - uvicorn.error - INFO - Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+# 停止特定服务
+./start-dev.sh stop api      # 停止 API 服务
+./start-dev.sh stop web      # 停止 Web 应用
+./start-dev.sh stop stt      # 停止 STT 服务
+./start-dev.sh stop diarization  # 停止说话人分离服务
+./start-dev.sh stop redis    # 停止 Redis 服务
+
+# 查看帮助
+./start-dev.sh help
 ```
 
-#### 5) 启动前端（Next.js）
-```bash
-cd web
-npm install
-npm run dev
-```
-随后再本机可访问 `http://localhost:3000`。
+## 使用docker（未测试）
 
----
+进入后端目录并启动所有微服务：
+```sh
+docker-compose up
+```
+
+
+启动成功后，服务端点如下：
+- **API 服务**：http://localhost:8000 （主要业务逻辑）
+- **STT 服务**：http://localhost:8001 （语音转文字）
+- **说话人分离服务**：http://localhost:8002 （说话人分离）
+- **Web 应用**：http://localhost:3000 （前端界面）
+
+
 
 备注：
 1. 目前我只在 ubuntu22.04 进行过安装测试。
 2. 如默认端口更改，需要修改 `next.config.js` 中的代理。
 3. 在局域网内使用，最好搭配 nginx 做https代理（没有在仓库中，需自行搭建）。本项目提供next.js代理方式，操作如下：
 
-安装mkcert
+
+##  局域网访问
+上述启动启动是http的服务，涉及麦克风权限，从其他PC上访问时，浏览器会拒绝访问。因此需要配置为https。当前项目支持next.js自身的代理服务。（生产需要自行替换为nginx作为代理）
+
+### 安装mkcert
 
 ``` bash
 cd web
@@ -245,7 +268,7 @@ sudo mv mkcert-v1.4.4-linux-amd64 /usr/local/bin/mkcert
 mkcert -version
 ```
 
-创建本地CA和证书
+### 创建本地CA和证书
 
 ```bash
 # 1. 安装本地CA到系统信任存储
@@ -265,65 +288,124 @@ npm run dev_https
 ```
 随后可在局域网内通过 https://you_machine_ip:3000 访问
 
+如果是一键脚本启动的，可将`npm run dev` 替换为上述。
 
-### 运行流程（端到端）
-- 登录（Supabase Auth）后进入首页。
-- 点击“开始录音”：
-  - 前端调用后端 `POST /api/v1/sessions` 创建会话，得到 `session_id`。
-  - 默认实现：浏览器用 `session_id` 作为 `webrtc_id` 调用 `/webrtc/offer` 建立 WebRTC 音频通道（也可替换为其他传输方案）。
-  - 前端通过 SSE 订阅 `/transcript?webrtc_id=...&token=...`，实时接收转写片段。
-- 点击“停止录音”：
-  - 断开 WebRTC，调用 `POST /api/v1/sessions/{session_id}/finalize`。
-  - 后端将缓存的音频整合、转码、上传到 Storage，并异步执行说话人分离与高质量批处理转写；会话状态变为 `processing`，完成后切回 `completed`。
-- 生成总结/标题：在会话详情中触发一次 `POST /api/v1/sessions/{id}/summarize`（可带模板），前端再调用生成标题接口。
-- 编辑与重命名：在转写视图中可局部编辑并保存（`PUT /api/v1/transcriptions/{id}`）；可以重命名说话人（`POST /api/v1/sessions/{id}/rename-speaker`）。
 
----
-
-### 后端 API 概览（/api/v1）
-
-- 健康检查
-  - `GET /health`
-- 会话管理
-  - `POST /sessions` 创建录音会话
-  - `GET /sessions/{id}` 获取详情（含音频/转写/总结）
-  - `POST /sessions/{id}/finalize` 完成会话（触发批处理）
-  - `POST /sessions/{id}/retranscribe` 重新转写
-  - `DELETE /sessions/{id}` 删除会话
-  - `PUT /sessions/{id}/template` 更新会话模板选择
-  - `POST /sessions/{id}/summarize?force=true&template_id=...` 生成并保存 AI 总结
-  - `POST /sessions/{id}/rename-speaker` 重命名说话人
-  - `GET /sessions/{id}/audio_files` / `GET /sessions/{id}/audio_files/{file_id}`
-- 转写
-  - `POST /transcriptions` 保存转写
-  - `PUT /transcriptions/{id}` 基于 segments 更新转写
-- AI
-  - `POST /summarize` 基于文本直接生成总结
-  - `POST /generate-title` 基于文本/总结生成标题
-- 音频与缓存
-  - `POST /batch-transcription` 上传单个音频文件并完成整套处理
-  - `GET /audio/session/current` 当前活跃会话
-  - `GET /audio/cache/status` 缓存状态
-- 模板
-  - `POST /templates` / `GET /templates` / `GET /templates/{id}` / `PUT /templates/{id}` / `DELETE /templates/{id}`
-  - `GET /templates/system` / `POST /templates/system/{system_template_id}/copy`
-
-说明：大多数端点需要携带 Supabase 的 Bearer Token（前端已集成）。
+# 运行流程（端到端）
+- **登录认证**：使用 Supabase Auth 进行用户登录验证，获取 JWT Token。
+- **创建会话**：
+  - 前端调用 API 服务 `POST /api/v1/sessions` 创建新的录音会话。
+  - 同时调用 `POST /api/v1/livekit/connection-details` 获取 LiveKit 连接信息（房间名、参与者令牌等）。
+- **开始实时录音**：
+  - 前端使用 LiveKit WebRTC SDK 连接到 LiveKit 房间，开始音频流传输。
+  - LiveKit 代理服务自动加入房间，接收音频流并调用 STT 微服务进行实时转写。
+  - 转写结果通过 Redis 缓存，前端通过 Supabase Realtime 订阅获得实时更新。
+- **停止录音与后处理**：
+  - 前端断开 LiveKit 连接，调用 `POST /api/v1/sessions/{session_id}/finalize` 完成会话。
+  - API 服务将音频数据上传到 Supabase Storage，并调用说话人分离微服务。
+  - 执行高质量批处理转写，会话状态更新为 `processing` → `completed`。
+- **AI 增强功能**：
+  - 生成总结：调用 `POST /api/v1/sessions/{id}/summarize`（可指定模板）。
+  - 生成标题：调用 `POST /api/v1/generate-title` 基于转写或总结内容。
+- **编辑与管理**：
+  - 转写编辑：`PUT /api/v1/transcriptions/{id}` 支持局部编辑并保留时间戳。
+  - 说话人重命名：`POST /api/v1/sessions/{id}/rename-speaker` 批量更新说话人标签。
 
 ---
 
-### 开发与部署要点
-- 需要安装 FFmpeg，后端会调用其命令行进行转码与切分。
-- FunASR 与 pyannote.audio 在 GPU 上可显著加速；若无 GPU 也可在 CPU 上运行（速度会降低）。
-- LiteLLM 可在 `backend/config.yaml` 配置多模型、超时与回退策略。
-- Web 前端通过 `/app/api/*` 作为轻量代理将请求转发到后端 `BACKEND_URL`，避免跨域与密钥暴露。
-- 数据库与迁移脚本在 `supabase/` 目录下进行版本化管理，推荐使用仓库内的结构脚本初始化，保持与代码一致。
+# API 服务概览
+
+## 主 API 服务 (端口 8000)
+**核心业务逻辑与集成服务**
+
+- **健康检查与信息**
+  - `GET /health` - 服务健康状态
+  - `GET /info` - 服务信息与版本
+
+- **会话管理**
+  - `POST /api/v1/sessions` - 创建录音会话
+  - `GET /api/v1/sessions/{id}` - 获取会话详情（含音频/转写/总结）
+  - `POST /api/v1/sessions/{id}/finalize` - 完成会话（触发批处理）
+  - `POST /api/v1/sessions/{id}/retranscribe` - 重新转写
+  - `DELETE /api/v1/sessions/{id}` - 删除会话
+
+- **LiveKit 集成**
+  - `POST /api/v1/livekit/connection-details` - 获取 LiveKit 连接信息
+  - `GET /api/v1/livekit/rooms` - 获取活跃房间列表
+
+- **AI 服务（集成）**
+  - `POST /api/v1/summarize` - 生成文本总结
+  - `POST /api/v1/generate-title` - 生成标题
+  - `POST /api/v1/sessions/{id}/summarize` - 为会话生成总结
+
+- **转写管理**
+  - `POST /api/v1/transcriptions` - 保存转写结果
+  - `PUT /api/v1/transcriptions/{id}` - 更新转写内容
+  - `POST /api/v1/sessions/{id}/rename-speaker` - 重命名说话人
+
+- **实时数据**
+  - `GET /api/v1/realtime/sessions/{id}/transcription` - 获取实时转写数据
+  - `GET /api/v1/realtime/sessions/{id}/status` - 获取会话实时状态
+
+## STT 微服务 (端口 8001)
+**专用语音转文字服务**
+
+- `GET /health` - 服务健康检查
+- `GET /info` - 模型信息与配置
+- `POST /transcribe` - 音频转写（同步）
+- `POST /transcribe-batch` - 批量音频处理
+
+## 说话人分离微服务 (端口 8002)
+**专用说话人分离服务**
+
+- `GET /health` - 服务健康检查  
+- `GET /info` - 模型信息与配置
+- `POST /diarize` - 音频说话人分离
+- `POST /diarize-file` - 文件上传分离
+
+**说明**：
+- 所有 API 服务端点需要携带 Supabase JWT Token 认证
+- 微服务间通过 HTTP 调用进行通信（localhost 环境下延迟 < 5ms）
+- Redis 用于缓存实时数据和服务间状态同步
 
 ---
 
-### 常见问题（FAQ）
+# 开发与部署要点
+
+## 微服务架构优势
+- **服务隔离**：各微服务独立部署、扩缩容，故障隔离性强
+- **资源优化**：STT 和说话人分离服务预加载模型，避免重复初始化
+- **技术栈灵活**：每个服务可使用最适合的技术栈和优化策略
+- **开发效率**：团队可并行开发不同服务，降低耦合度
+
+## 容器化部署
+- **Docker Compose**：统一管理所有微服务的生命周期
+- **GPU 支持**：STT 和说话人分离服务可配置 GPU 加速，显著提升性能
+- **资源限制**：每个服务可独立配置 CPU、内存资源限制
+- **健康检查**：内置健康检查机制，确保服务可用性
+
+## 性能优化
+- **模型预加载**：FunASR 和 pyannote.audio 模型在服务启动时预加载，避免延迟
+- **Redis 缓存**：实时数据通过 Redis 缓存，提升响应速度
+- **异步处理**：批处理任务异步执行，不阻塞实时功能
+- **连接复用**：微服务间 HTTP 连接复用，减少延迟
+
+## 配置管理
+- **环境变量**：通过 `.env` 文件统一管理配置，支持不同环境
+- **AI 配置**：`backend/ai_config.yaml` 配置多模型、超时与回退策略
+- **LiveKit 集成**：支持 LiveKit Cloud 或自建服务器
+- **FFmpeg 依赖**：容器内预装 FFmpeg，支持音频转码与切分
+
+## 开发工作流
+- **服务管理**：使用脚本统一管理服务启动、停止、日志查看
+- **热重载**：开发模式下支持代码变更自动重启服务
+- **日志聚合**：所有服务日志统一收集，便于调试
+- **健康监控**：实时监控各服务健康状态
+
+---
+# 常见问题（FAQ）
 - 实时转写没有输出？
-  - 检查浏览器是否授权麦克风；确认后端 `http://localhost:8000/transcript` 可达；控制台中是否有 SSE 连接日志。
+  - 检查浏览器是否授权麦克风；
 - 说话人分离不可用？
   - 检查 `HUGGINGFACE_TOKEN` 是否配置；pyannote 模型需要授权；若不可用系统会回退为单一说话人。
 - 音频无法转码或处理失败？
@@ -332,18 +414,22 @@ npm run dev_https
   - 检查后端是否已正确配置模型与 API Key（LiteLLM）。
 - CUDA警告？
   - 检查pytorch cuda版本与系统的NVIDIA 驱动版本
----
 
-### License
+# License
 MIT
 
 ## Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=weynechen/intrascribe&type=Date)](https://www.star-history.com/#weynechen/intrascribe&Date)
 
-### TODO
-开发会议助手硬件：
+# TODO
+## 手机APP
+
+## 硬件
 
 - 增加麦克风阵列硬件接入
 - 增加AI对话功能，使用RAG实时回答记录相关的问题
+
+## 其他功能
+TBD
 

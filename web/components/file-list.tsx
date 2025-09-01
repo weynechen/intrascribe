@@ -3,10 +3,12 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Mic, Calendar, Clock, X, FileText } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { Recorder } from '@/components/recorder'
+import { DirectLiveKitRecorder } from '@/components/direct-livekit-recorder'
+import '@livekit/components-styles'
 import { TranscriptEvent, supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { toast } from 'sonner'
@@ -99,7 +101,7 @@ export function FileList({
         .select('id, name, description, template_content, is_default, is_active, category')
         .eq('user_id', user.id)
         .eq('is_active', true)
-        .order('is_default', { ascending: false })
+        .eq('is_default', false)  // 过滤掉默认模板
         .order('name', { ascending: true })
 
       if (error) throw error
@@ -165,15 +167,15 @@ export function FileList({
 
   // 处理模板选择
   const handleTemplateChange = (sessionId: string, templateId: string) => {
-    // 将"default"转换为空字符串传递给后端
-    const finalTemplateId = templateId === 'default' ? '' : templateId
+    // 将"no-template"转换为空字符串传递给后端
+    const finalTemplateId = templateId === 'no-template' ? '' : templateId
     console.log('🔧 FileList模板选择:', { sessionId, templateId, finalTemplateId })
     onTemplateSelect?.(sessionId, finalTemplateId)
   }
 
   // 获取模板名称
   const getTemplateName = (templateId?: string) => {
-    if (!templateId || templateId === 'default') return '默认模板'
+    if (!templateId || templateId === 'no-template') return '不使用模板'
     const template = templates.find(t => t.id === templateId)
     return template?.name || '未知模板'
   }
@@ -198,7 +200,7 @@ export function FileList({
       {showRecorder && (
         <div className="p-4 border-b border-gray-200 bg-gray-50">
           <div className="text-center">
-            <Recorder
+            <DirectLiveKitRecorder
               onTranscript={onTranscript || (() => {})}
               onRecordingStateChange={handleRecordingStateChange}
               onSessionCreated={onSessionCreated}
@@ -284,7 +286,7 @@ export function FileList({
                   {recording.status === 'completed' && templates.length > 0 && (
                     <div className="flex-shrink-0">
                       <Select
-                        value={recording.templateId || 'default'}
+                        value={recording.templateId || 'no-template'}
                         onValueChange={(templateId) => handleTemplateChange(recording.id, templateId)}
                       >
                         <SelectTrigger 
@@ -301,14 +303,14 @@ export function FileList({
                           </div>
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="default">默认模板</SelectItem>
+                          <SelectItem value="no-template">不使用模板</SelectItem>
                           {templates.map((template) => (
                             <SelectItem key={template.id} value={template.id}>
                               <div className="flex items-center space-x-2">
                                 <span>{template.name}</span>
-                                {template.is_default && (
-                                  <span className="text-xs text-blue-600">(默认)</span>
-                                )}
+                                <Badge variant="outline" className="text-xs">
+                                  {template.category}
+                                </Badge>
                               </div>
                             </SelectItem>
                           ))}
