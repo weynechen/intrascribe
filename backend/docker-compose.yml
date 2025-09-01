@@ -156,6 +156,35 @@ services:
     networks:
       - intrascribe-network
 
+  # Next.js Web Application
+  web-app:
+    build:
+      context: ../web
+      dockerfile: Dockerfile
+    container_name: intrascribe-web
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DOCKER_ENV=true
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - NEXT_PUBLIC_LIVEKIT_URL=${LIVEKIT_API_URL}
+      - BACKEND_URL=http://api-service:8000
+      - SUPABASE_URL=http://host.docker.internal:54321
+    depends_on:
+      api-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 30s
+      retries: 3
+      start_period: 10s
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - intrascribe-network
+
 # Volumes for persistent data
 volumes:
   redis_data:
