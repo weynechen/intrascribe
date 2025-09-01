@@ -31,12 +31,18 @@ A complete microservices-based backend for the Intrascribe platform, featuring s
 
 ```bash
 # Clone and setup
-cd backend_new
-make init
+cd backend
 
+# Quick start for new developers
+make quickstart
+
+# OR manual setup:
+make init
 # Edit configuration
 nano .env
 ```
+
+**注意**: 如果您是首次设置，建议手动创建 `.env.example` 模板文件，内容可参考 [Environment Variables](#environment-variables) 部分的配置示例。
 
 ### 2. Start All Services
 
@@ -59,19 +65,22 @@ make health
 ### Environment Variables
 
 ```bash
-# Database
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=your-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+# Supabase 配置（本地开发环境）
+SUPABASE_URL=http://127.0.0.1:54321
+SUPABASE_ANON_KEY=your-supabase-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
 
-# AI Services
+# LiveKit 配置
+LIVEKIT_API_URL=wss://your-livekit-instance.livekit.cloud
+LIVEKIT_API_KEY=your-livekit-api-key
+LIVEKIT_API_SECRET=your-livekit-api-secret
+
+# AI 服务（可选）
 OPENAI_API_KEY=sk-your-openai-key
 ANTHROPIC_API_KEY=sk-ant-your-anthropic-key
-HUGGINGFACE_TOKEN=hf_your-token
 
-# LiveKit
-LIVEKIT_API_URL=wss://your-instance.livekit.cloud
-LIVEKIT_SECRET=your-secret
+# HuggingFace（说话人分离必需）
+HUGGINGFACE_TOKEN=hf_your-huggingface-token
 ```
 
 ### GPU Support
@@ -113,6 +122,9 @@ deploy:
 ### Starting Development Environment
 
 ```bash
+# Quick start (recommended for new developers)
+make quickstart
+
 # Start with auto-rebuild
 make dev
 
@@ -147,6 +159,9 @@ make stats
 
 # Service status
 make status
+
+# Detailed service information
+make info
 ```
 
 ## 📡 API Usage Examples
@@ -356,7 +371,8 @@ make logs-diarization-service
 ```bash
 # Check LiveKit configuration
 echo $LIVEKIT_API_URL
-echo $LIVEKIT_SECRET
+echo $LIVEKIT_API_KEY
+echo $LIVEKIT_API_SECRET
 
 # Restart agent
 make agent-stop
