@@ -224,7 +224,7 @@ livekit-server --dev
 ```
 
 ## 使用docker（未测试）
-
+除了启动脚本外，也可以选择docker启动。
 进入后端目录并启动所有微服务：
 ```sh
 docker-compose up
