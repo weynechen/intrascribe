@@ -618,7 +618,7 @@ export function useRecordingSessions() {
           status: 'completed',
           ended_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-          duration_seconds: Math.floor(Number(result.final_data?.total_duration_seconds || 0))
+          duration_seconds: Math.floor(Number((result.final_data as { total_duration_seconds?: number })?.total_duration_seconds || 0))
         })
         .eq('id', sessionId)
         .select()

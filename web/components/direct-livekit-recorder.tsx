@@ -77,7 +77,7 @@ function DirectLiveKitRecorderInner({ onTranscript, onRecordingStateChange, onSe
       const mediaStreamTrack = audioTrack.mediaStreamTrack
       const stream = new MediaStream([mediaStreamTrack])
       
-      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)()
+      audioContextRef.current = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
       analyserRef.current = audioContextRef.current.createAnalyser()
       const audioSource = audioContextRef.current.createMediaStreamSource(stream)
       audioSource.connect(analyserRef.current)
@@ -124,7 +124,7 @@ function DirectLiveKitRecorderInner({ onTranscript, onRecordingStateChange, onSe
   useEffect(() => {
     if (!room) return
 
-    const handleDataReceived = (payload: Uint8Array, participant: any) => {
+    const handleDataReceived = (payload: Uint8Array) => {
       try {
         const textData = new TextDecoder().decode(payload)
         const transcriptData: TranscriptEvent = JSON.parse(textData)
@@ -179,7 +179,8 @@ function DirectLiveKitRecorderInner({ onTranscript, onRecordingStateChange, onSe
   // 监听音频轨道变化，设置可视化
   useEffect(() => {
     if (tracks.length > 0) {
-      const audioTrack = tracks[0].track
+      const trackRef = tracks[0]
+      const audioTrack = trackRef.publication?.track
       if (audioTrack instanceof LocalAudioTrack || audioTrack instanceof RemoteAudioTrack) {
         setupAudioVisualization(audioTrack)
       }
@@ -213,12 +214,7 @@ function DirectLiveKitRecorderInner({ onTranscript, onRecordingStateChange, onSe
 
       // 3. 连接到LiveKit房间
       console.log('2️⃣ 连接LiveKit房间:', connectionConfig.roomName)
-      await room.connect(connectionConfig.serverUrl, connectionConfig.token, {
-        publishDefaults: {
-          audioEnabled: false,  // 先不启用音频
-          videoEnabled: false
-        }
-      })
+      await room.connect(connectionConfig.serverUrl, connectionConfig.token)
 
       // 4. 连接成功后再启用麦克风
       console.log('3️⃣ 启用麦克风...')
@@ -233,7 +229,7 @@ function DirectLiveKitRecorderInner({ onTranscript, onRecordingStateChange, onSe
       setIsConnecting(false)
       setSessionStarted(false)
     }
-  }, [isConnecting, sessionStarted, authSession, createRoomConfig, room, showError])
+  }, [isConnecting, sessionStarted, authSession, createRoomConfig, room, showError, onSessionCreated])
 
   const stopRecording = useCallback(() => {
     if (!sessionStarted) {
@@ -354,8 +350,6 @@ export function DirectLiveKitRecorder({ onTranscript, onRecordingStateChange, on
     adaptiveStream: true,
     // 启用动态质量优化
     dynacast: true,
-    // 自动管理订阅
-    autoManageSubscription: true,
   }), [])
 
   // 清理房间资源

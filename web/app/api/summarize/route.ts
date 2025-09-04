@@ -3,8 +3,15 @@ import { NextRequest, NextResponse } from 'next/server'
 // 后端服务的基础URL
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000'
 
+// Task status interface
+interface TaskResult {
+  summary: string
+  key_points: string[]
+  summary_id?: string
+}
+
 // 轮询任务状态的辅助函数
-async function pollTaskStatus(taskId: string, maxAttempts: number = 120): Promise<any> {
+async function pollTaskStatus(taskId: string, maxAttempts: number = 120): Promise<TaskResult> {
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const statusResponse = await fetch(`${BACKEND_URL}/api/v2/tasks/${taskId}`)
     

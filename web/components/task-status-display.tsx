@@ -5,11 +5,16 @@ import { Badge } from './ui/badge'
 import { Progress } from './ui/progress'
 import { toast } from 'sonner'
 import { TaskStatusResponse, getTaskStatus } from '@/lib/api-types'
+
+// Task result type
+interface TaskResult {
+  [key: string]: unknown
+}
 import { supabase } from '@/lib/supabase'
 
 interface TaskStatusDisplayProps {
   taskId: string
-  onComplete?: (result: any) => void
+  onComplete?: (result: TaskResult) => void
   onError?: (error: string) => void
   onCancel?: () => void
   showProgress?: boolean
@@ -40,7 +45,7 @@ export function TaskStatusDisplay({
   useEffect(() => {
     if (!taskId) return
     
-    let pollInterval: NodeJS.Timeout
+    let intervalId: NodeJS.Timeout | null = null
     
     const pollTaskStatus = async () => {
       try {
@@ -75,7 +80,7 @@ export function TaskStatusDisplay({
         
         // 处理任务完成
         if (taskInfo.isCompleted) {
-          clearInterval(pollInterval)
+          if (intervalId) clearInterval(intervalId)
           setProgress(100)
           
           if (status.result && onComplete) {
@@ -89,7 +94,7 @@ export function TaskStatusDisplay({
         
         // 处理任务失败
         if (taskInfo.isFailed) {
-          clearInterval(pollInterval)
+          if (intervalId) clearInterval(intervalId)
           
           const error = status.error || '任务执行失败'
           toast.error(error)
@@ -101,7 +106,7 @@ export function TaskStatusDisplay({
         
         // 处理任务取消
         if (taskInfo.isCancelled) {
-          clearInterval(pollInterval)
+          if (intervalId) clearInterval(intervalId)
           
           toast.info('任务已取消')
           
@@ -112,7 +117,7 @@ export function TaskStatusDisplay({
         
       } catch (error) {
         console.error('轮询任务状态失败:', error)
-        clearInterval(pollInterval)
+        if (intervalId) clearInterval(intervalId)
         
         const errorMsg = error instanceof Error ? error.message : '获取任务状态失败'
         toast.error(errorMsg)
@@ -127,11 +132,11 @@ export function TaskStatusDisplay({
     pollTaskStatus()
     
     // 设置轮询间隔
-    pollInterval = setInterval(pollTaskStatus, 2000)
+    intervalId = setInterval(pollTaskStatus, 2000)
     
     return () => {
-      if (pollInterval) {
-        clearInterval(pollInterval)
+      if (intervalId) {
+        clearInterval(intervalId)
       }
     }
   }, [taskId, onComplete, onError, onCancel, autoHide, progress])

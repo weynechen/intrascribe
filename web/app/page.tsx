@@ -214,7 +214,7 @@ export default function HomePage() {
     setSelectedSessionId(actualSessionId)
     
     // 简化：依赖实时订阅的 INSERT/UPDATE 事件自动更新
-  }, [fetchSessions])
+  }, [])
 
   // Handle audio time updates for transcript highlighting
   const handleAudioTimeUpdate = useCallback((currentTime: number) => {

@@ -44,7 +44,7 @@ export function TemplateSelector({
       console.warn('⚠️ 无法创建API客户端：缺少认证token')
       setApiClient(null)
     }
-  }, [session?.access_token])
+  }, [session])
 
   // 加载模板
   const loadTemplates = useCallback(async () => {
@@ -81,11 +81,11 @@ export function TemplateSelector({
     } finally {
       setLoading(false)
     }
-  }, [apiClient, selectedTemplateId, onTemplateChange, session?.access_token])
+  }, [apiClient, session?.access_token])
 
   useEffect(() => {
     loadTemplates()
-  }, [loadTemplates])
+  }, [loadTemplates, session])
 
   const handleGenerateClick = () => {
     console.log('🔍 模板选择器调试:', {

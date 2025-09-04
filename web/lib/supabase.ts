@@ -1,10 +1,9 @@
 import { createClient } from '@supabase/supabase-js'
 import {
-  SyncResponse, AsyncResponse, TaskStatusResponse,
+  TaskStatusResponse, SessionData,
   SessionCreateResponse, SessionDeleteResponse, SessionFinalizeResponse,
-  AsyncAIResponse, AsyncTranscriptionResponse,
-  AISummaryResponse, AISummaryData,
-  isAsyncResponse, isSyncResponse, isTaskStatusResponse,
+  AISummaryResponse,
+  isSyncResponse,
   getTaskStatus
 } from './api-types'
 
@@ -490,8 +489,8 @@ export interface RecordingSessionWithRelations extends RecordingSession {
   ai_summaries?: AISummary[]
 }
 
-// API 响应类型
-export interface SessionCreateResponse {
+// Local session data interface for legacy compatibility
+interface LocalSessionCreateResponse {
   session_id: string
   title: string
   status: string
@@ -500,17 +499,6 @@ export interface SessionCreateResponse {
   usage_hint: string
 }
 
-export interface SessionFinalizeResponse {
-  message: string
-  session_id: string
-  status: string
-  final_data: {
-    total_duration_seconds: number
-    word_count: number
-    audio_file_path: string
-    transcription_saved: boolean
-  }
-}
 
 // 实时转录数据类型
 export interface TranscriptEvent {
@@ -522,18 +510,6 @@ export interface TranscriptEvent {
 }
 
 // AI 服务响应类型
-export interface AISummaryResponse {
-  summary: string
-  metadata: {
-    model_used: string
-    success: boolean
-    total_processing_time: number
-    transcription_length: number
-    timestamp: number
-    error?: string
-    fallback_used?: boolean
-  }
-}
 
 export interface AITitleResponse {
   title: string
@@ -636,7 +612,7 @@ export class APIClient {
 
   // 会话管理
   async createSession(title: string, language: string = 'zh-CN', sttModel: string = 'whisper'): Promise<SessionCreateResponse> {
-    const response = await this.request<SessionCreateResponse>('/sessions', {
+    const response = await this.request<LocalSessionCreateResponse>('/sessions', {
       method: 'POST',
       body: JSON.stringify({
         title,
@@ -648,14 +624,14 @@ export class APIClient {
     // 检查响应格式并适配
     if (isSyncResponse(response)) {
       // 新的统一响应格式
-      return response
+      return response as SessionCreateResponse
     } else {
       // 兼容旧格式，包装成新格式
       return {
         success: true,
         message: "会话创建成功",
         timestamp: new Date().toISOString(),
-        data: response as any
+        data: response as SessionData
       }
     }
   }
@@ -731,13 +707,15 @@ export class APIClient {
   }
 
   // 响应格式检测和处理
-  private isAsyncResponse(response: any): boolean {
-    return response && typeof response === 'object' && 
+  private isAsyncResponse(response: unknown): boolean {
+    return typeof response === 'object' && 
+           response !== null && 
            'task_id' in response && 'poll_url' in response
   }
   
-  private isSyncResponse(response: any): boolean {
-    return response && typeof response === 'object' && 
+  private isSyncResponse(response: unknown): boolean {
+    return typeof response === 'object' && 
+           response !== null && 
            'data' in response && !('task_id' in response)
   }
 
@@ -768,10 +746,11 @@ export class APIClient {
     if (this.isAsyncResponse(data)) {
       console.log('🔄 检测到异步响应，开始轮询:', data.task_id)
       const result = await this.pollV2TaskStatus(data.task_id)
+      const summaryResult = result as { summary: string; key_points?: string[]; metadata?: Record<string, unknown> }
       return {
-        summary: result.summary,
-        key_points: result.key_points || [],
-        metadata: result.metadata || {}
+        summary: summaryResult.summary,
+        key_points: summaryResult.key_points || [],
+        metadata: summaryResult.metadata || {}
       }
     } else {
       // 直接返回同步响应
@@ -785,7 +764,7 @@ export class APIClient {
   }
 
   // 轮询V2任务状态的辅助方法
-  private async pollV2TaskStatus(taskId: string, maxAttempts: number = 120): Promise<any> {
+  private async pollV2TaskStatus(taskId: string, maxAttempts: number = 120): Promise<unknown> {
     const baseURL = this.baseURL.replace('/v1', '') // 移除v1，直接访问v2
     
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -806,42 +785,31 @@ export class APIClient {
         console.log(`🔄 V2任务状态轮询 ${attempt + 1}/${maxAttempts}:`, taskStatusResponse.status)
 
         // 使用新的类型守卫和工具函数
-        if (isTaskStatusResponse(taskStatusResponse)) {
-          const status = getTaskStatus(taskStatusResponse)
-          
-          // 任务完成
-          if (status.isCompleted && taskStatusResponse.result) {
-            console.log('✅ V2任务完成，返回结果')
-            return taskStatusResponse.result
-          }
+        const status = getTaskStatus(taskStatusResponse)
+        
+        // 任务完成
+        if (status.isCompleted && taskStatusResponse.result) {
+          console.log('✅ V2任务完成，返回结果')
+          return taskStatusResponse.result
+        }
 
-          // 任务失败
-          if (status.isFailed) {
-            console.error('❌ V2任务失败:', taskStatusResponse.error)
-            throw new Error(taskStatusResponse.error || '任务执行失败')
-          }
+        // 任务失败
+        if (status.isFailed) {
+          console.error('❌ V2任务失败:', taskStatusResponse.error)
+          throw new Error(taskStatusResponse.error || '任务执行失败')
+        }
 
-          // 任务被取消
-          if (status.isCancelled) {
-            console.warn('⚠️ V2任务被取消')
-            throw new Error('任务被取消')
-          }
+        // 任务被取消
+        if (status.isCancelled) {
+          console.warn('⚠️ V2任务被取消')
+          throw new Error('任务被取消')
+        }
 
-          // 任务仍在进行中
-          if (status.isPending) {
-            console.log('⏳ V2任务进行中:', taskStatusResponse.progress)
-            await new Promise(resolve => setTimeout(resolve, 3000))
-            continue
-          }
-        } else {
-          // 兼容旧的响应格式
-          if (taskStatusResponse.status === 'success' && (taskStatusResponse as any).result) {
-            return (taskStatusResponse as any).result
-          }
-          
-          if (taskStatusResponse.status === 'failure') {
-            throw new Error(taskStatusResponse.error || '任务执行失败')
-          }
+        // 任务仍在进行中
+        if (status.isPending) {
+          console.log('⏳ V2任务进行中:', taskStatusResponse.progress)
+          await new Promise(resolve => setTimeout(resolve, 3000))
+          continue
         }
         
         console.warn('⚠️ 未知任务状态:', taskStatusResponse.status)
@@ -924,9 +892,10 @@ export class APIClient {
       // 轮询任务状态
       const result = await this.pollV2TaskStatus(taskData.task_id)
       console.log('✅ V2 AI总结生成完成')
-
+      
+      const summaryResult = result as { summary: string }
       return {
-        summary: result.summary,
+        summary: summaryResult.summary,
         metadata: { generated_by: 'v2_async_task' }
       }
     } catch (error) {
@@ -1073,7 +1042,8 @@ export class APIClient {
         return await this.request<{ success: boolean; message: string; session_id: string; status: string }>(`/sessions/${sessionId}/retranscribe`, {
           method: 'POST'
         })
-      } catch (v1Error) {
+      } catch (error) {
+        console.warn('V1 retranscribe API also failed:', error)
         return {
           success: false,
           message: "重新转录功能暂时不可用",

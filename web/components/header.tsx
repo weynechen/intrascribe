@@ -15,7 +15,7 @@ interface HeaderProps {
   onAudioTimeUpdate?: (currentTime: number) => void
   onAudioSeekTo?: (time: number) => void
   onRefreshSessions?: () => void
-  onRefreshAudio?: () => Promise<void>
+  onRefreshAudio?: React.MutableRefObject<(() => Promise<void>) | null>
   apiClient?: unknown
 }
 
@@ -81,6 +81,7 @@ export function Header({
           let proxyUrl = originalUrl
           
           // 如果是HTTP地址，转换为代理路径
+          //TODO：历史遗留，后续可去掉
           if (originalUrl && originalUrl.startsWith('http://localhost:54321/')) {
             proxyUrl = originalUrl.replace('http://localhost:54321/', '/')
           } else if (originalUrl && originalUrl.includes('localhost:54321')) {
