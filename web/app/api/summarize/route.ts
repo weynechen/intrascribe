@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-
-// 后端服务的基础URL
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000'
+import { httpClient } from '@/lib/api-client'
 
 // Task status interface
 interface TaskResult {
@@ -13,13 +11,11 @@ interface TaskResult {
 // 轮询任务状态的辅助函数
 async function pollTaskStatus(taskId: string, maxAttempts: number = 120): Promise<TaskResult> {
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const statusResponse = await fetch(`${BACKEND_URL}/api/v2/tasks/${taskId}`)
-    
-    if (!statusResponse.ok) {
-      throw new Error(`获取任务状态失败: ${statusResponse.status}`)
-    }
-    
-    const status = await statusResponse.json()
+    // 使用统一API客户端查询任务状态
+    const status = await httpClient.apiServer(`/v2/tasks/${taskId}`, {
+      method: 'GET',
+      skipAuth: true // API路由到API路由，不需要认证
+    })
     console.log(`📊 任务状态检查 (${attempt + 1}/${maxAttempts}):`, status.status)
     
     if (status.ready) {
@@ -52,29 +48,15 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('🔄 提交V2异步AI总结任务...')
-    // 调用V2 API提交异步任务
-    const taskResponse = await fetch(`${BACKEND_URL}/api/v2/sessions/${sessionId}/ai-summary`, {
+    // 使用统一API客户端提交异步任务
+    const taskData = await httpClient.apiServer(`/v2/sessions/${sessionId}/ai-summary`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        // 这里需要添加认证头，实际使用时从request中获取
-        // 'Authorization': `Bearer ${token}`
-      },
       body: JSON.stringify({ 
         transcription_text: transcription,
         template_id: templateId || null
-      })
+      }),
+      skipAuth: true // API路由之间调用，暂时跳过认证
     })
-
-    console.log('📡 后端任务提交响应状态:', taskResponse.status)
-
-    if (!taskResponse.ok) {
-      const errorText = await taskResponse.text()
-      console.log('❌ 任务提交失败:', errorText)
-      throw new Error(`任务提交失败: ${taskResponse.status} ${taskResponse.statusText}`)
-    }
-
-    const taskData = await taskResponse.json()
     const taskId = taskData.task_id
     console.log('✅ 异步任务已提交，任务ID:', taskId)
 

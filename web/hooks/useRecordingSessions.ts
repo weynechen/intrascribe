@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { supabase, RecordingSessionWithRelations, APIClient, subscriptionManager } from '@/lib/supabase'
+import { supabase, RecordingSessionWithRelations, subscriptionManager } from '@/lib/supabase-client'
+import { apiServerClient } from '@/lib/api-server-client'
 import { useAuth } from './useAuth'
 import { toast } from 'sonner'
 import { isSyncResponse, isAsyncResponse } from '@/lib/api-types'
@@ -10,20 +11,14 @@ export function useRecordingSessions() {
   const { user, session } = useAuth()
   const [sessions, setSessions] = useState<RecordingSessionWithRelations[]>([])
   const [loading, setLoading] = useState(true)
-  const [apiClient, setApiClient] = useState<APIClient | null>(null)
+  // 使用统一的API服务客户端（无需state管理）
   const channelNameRef = useRef<string>('')
   const transcriptionChannelNameRef = useRef<string>('')
   const fetchingRef = useRef(false)
   const lastUserIdRef = useRef<string>('')
   const initializedRef = useRef(false)
 
-  // 初始化API客户端
-  useEffect(() => {
-    if (session?.access_token) {
-      const client = new APIClient('/api/v1', () => session.access_token)
-      setApiClient(client)
-    }
-  }, [session?.access_token])
+  // API客户端已统一管理，无需单独初始化
 
   // 获取用户的录音会话 - 使用稳定的函数
   const fetchSessions = useCallback(async (userId: string, force: boolean = false) => {
@@ -516,13 +511,14 @@ export function useRecordingSessions() {
 
   // 创建新的录音会话
   const createSession = async (title: string, language: string = 'zh-CN') => {
-    if (!apiClient || !user) return null
+    if (!user) return null
 
     try {
       console.log('🚀 创建新的录音会话:', { title, language })
       
-      // 第一步：调用后端API创建会话（处理业务逻辑、缓存管理等）
-      const response = await apiClient.createSession(title, language)
+      // 设置认证token并调用后端API创建会话
+      apiServerClient.setAuthToken(session?.access_token || null)
+      const response = await apiServerClient.createSession(title, language)
       console.log('✅ 后端会话创建成功:', response)
       
       // 适配新的响应格式
@@ -592,23 +588,23 @@ export function useRecordingSessions() {
   const finalizeSession = async (sessionId: string) => {
     console.log('🔍 finalizeSession 调试信息:', {
       sessionId,
-      hasApiClient: !!apiClient,
       hasUser: !!user,
       userId: user?.id,
       hasSession: !!session,
       hasAccessToken: !!session?.access_token
     })
     
-    if (!apiClient || !user) {
-      console.error('❌ API客户端未初始化或用户未登录')
+    if (!user) {
+      console.error('❌ 用户未登录')
       return
     }
 
     try {
       console.log('🏁 完成会话:', sessionId)
       
-      // 第一步：调用后端API完成会话（处理转录、音频文件、业务逻辑等）
-      const result = await apiClient.finalizeSession(sessionId)
+      // 设置认证token并调用后端API完成会话
+      apiServerClient.setAuthToken(session?.access_token || null)
+      const result = await apiServerClient.finalizeSession(sessionId)
       console.log('✅ 后端会话完成:', result)
       
       // 第二步：使用前端Supabase客户端触发UPDATE事件，确保实时订阅能接收到状态更新
@@ -715,7 +711,7 @@ export function useRecordingSessions() {
 
   // 删除录音会话
   const deleteSession = async (sessionId: string) => {
-    if (!apiClient) {
+    if (!user) {
       console.error('❌ API客户端未初始化')
       toast.error('系统未初始化，请刷新页面')
       return
@@ -724,8 +720,9 @@ export function useRecordingSessions() {
     try {
       console.log('🗑️ 删除录音会话:', sessionId)
       
-      // 调用后端API删除会话（包括音频文件）
-      const response = await apiClient.deleteSession(sessionId)
+      // 设置认证token并调用后端API删除会话
+      apiServerClient.setAuthToken(session?.access_token || null)
+      const response = await apiServerClient.deleteSession(sessionId)
       console.log('✅ 后端删除会话成功:', response)
       
       // 适配新的响应格式
@@ -755,7 +752,7 @@ export function useRecordingSessions() {
 
   // 生成AI总结 - V2异步API
   const generateSummary = async (sessionId: string, transcription: string, templateId?: string) => {
-    if (!apiClient) return null
+    if (!user) return null
 
     try {
       console.log('🤖 生成AI总结V2调试:', {
@@ -766,8 +763,9 @@ export function useRecordingSessions() {
         templateIdValue: templateId
       })
       
-      // 调用V2异步API - 使用会话级总结API
-      const result = await apiClient.generateSessionSummary(sessionId, true, templateId)
+      // 设置认证token并调用V2异步API
+      apiServerClient.setAuthToken(session?.access_token || null)
+      const result = await apiServerClient.generateSessionSummary(sessionId, true, templateId)
       
       console.log('✅ V2 AI总结生成并保存完成:', result)
       
@@ -790,12 +788,12 @@ export function useRecordingSessions() {
 
   // 生成AI标题
   const generateTitle = async (sessionId: string, transcription: string, summary?: string) => {
-    if (!apiClient) return null
-
     try {
       console.log('🤖 生成AI标题:', sessionId)
       
-      const result = await apiClient.generateTitle(sessionId, transcription, summary)
+      // 设置认证token并生成AI标题
+      apiServerClient.setAuthToken(session?.access_token || null)
+      const result = await apiServerClient.generateTitle(sessionId, transcription, summary)
       console.log('✅ AI标题生成完成:', result)
       
       await updateSessionTitle(sessionId, result.title)

@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import { MessageSquare, Copy, X, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/hooks/useAuth'
+import { apiDelete, apiPut, httpClient } from '@/lib/api-client'
 import { toast } from 'sonner'
 import MDEditor from '@uiw/react-md-editor'
 import '@uiw/react-md-editor/markdown-editor.css'
@@ -105,22 +106,9 @@ export function AISummaryPanel({
       
       console.log('📤 发送请求到API:', requestBody)
 
-      const response = await fetch(`/api/v2/sessions/${sessionId}/ai-summaries/${summaryId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`
-        },
-        body: JSON.stringify(requestBody)
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        console.error('❌ API响应错误:', errorData)
-        throw new Error(errorData.detail || '保存失败')
-      }
-
-      const result = await response.json()
+      // 使用统一API客户端更新AI总结
+      httpClient.setAuthTokenGetter(() => session.access_token)
+      const result = await apiPut('api', `/v2/sessions/${sessionId}/ai-summaries/${summaryId}`, requestBody)
       console.log('✅ 保存成功:', result)
       
       // 通知父组件更新

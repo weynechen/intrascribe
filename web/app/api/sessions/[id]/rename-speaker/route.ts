@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-
-// 后端服务的基础URL
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000'
+import { httpClient } from '@/lib/api-client'
 
 export async function POST(
   request: NextRequest,
@@ -39,42 +37,18 @@ export async function POST(
       )
     }
 
-    // 转发请求到后端API
-    const backendUrl = `${BACKEND_URL}/api/v1/sessions/${sessionId}/rename-speaker`
-    console.log('🔄 调用后端API:', backendUrl)
+    // 使用统一API客户端转发请求到后端API
+    const token = authorization.replace('Bearer ', '')
+    httpClient.setAuthTokenGetter(() => token)
+    console.log('🔄 调用后端API:', `/v1/sessions/${sessionId}/rename-speaker`)
     
-    const response = await fetch(backendUrl, {
+    const result = await httpClient.apiServer(`/v1/sessions/${sessionId}/rename-speaker`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': authorization,
-      },
       body: JSON.stringify({
         oldSpeaker,
         newSpeaker
       })
     })
-
-    console.log('📡 后端API响应状态:', response.status)
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.log('❌ 后端API调用失败:', errorText)
-      
-      let errorData
-      try {
-        errorData = JSON.parse(errorText)
-      } catch {
-        errorData = { error: errorText }
-      }
-      
-      return NextResponse.json(
-        { error: errorData.detail || errorData.error || '说话人重命名失败' },
-        { status: response.status }
-      )
-    }
-
-    const result = await response.json()
     console.log('✅ 说话人重命名成功')
 
     return NextResponse.json(result)

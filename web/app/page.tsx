@@ -19,7 +19,8 @@ import { TemplateManager } from '@/components/template-manager'
 import { useAuth } from '@/hooks/useAuth'
 import { useRecordingSessions } from '@/hooks/useRecordingSessions'
 import { toast } from 'sonner'
-import { TranscriptEvent } from '@/lib/supabase'
+import { TranscriptEvent } from '@/lib/supabase-client'
+import { apiPost, httpClient } from '@/lib/api-client'
 
 interface TranscriptItem {
   id: string
@@ -1079,24 +1080,12 @@ export default function HomePage() {
         return
       }
 
-      // Call API to update speaker name in database
-      const response = await fetch(`/api/v1/sessions/${sessionId}/rename-speaker`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          oldSpeaker,
-          newSpeaker
-        })
+      // 使用统一API客户端更新说话人名称
+      httpClient.setAuthTokenGetter(() => token)
+      const result = await apiPost('api', `/v1/sessions/${sessionId}/rename-speaker`, {
+        oldSpeaker,
+        newSpeaker
       })
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
-      const result = await response.json()
       
       if (result.success) {
         console.log('✅ 说话人重命名成功')

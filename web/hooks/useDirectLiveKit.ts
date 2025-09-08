@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from 'react'
 import { useAuth } from './useAuth'
+import { apiPost, httpClient } from '@/lib/api-client'
 
 // 直接连接LiveKit的配置
 export interface LiveKitDirectConfig {
@@ -57,28 +58,15 @@ export default function useDirectLiveKit(appConfig: AppConfig = {}) {
     try {
       console.log('🔧 创建LiveKit房间配置...', appConfig)
       
-      // 调用后端API获取连接详情
-      const response = await fetch('/api/v1/livekit/connection-details', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authSession.access_token}`
-        },
-        body: JSON.stringify({
-          room_config: appConfig.agentName ? {
-            agents: [{ agent_name: appConfig.agentName }]
-          } : undefined,
-          title: appConfig.title || '新录音会话',
-          language: appConfig.language || 'zh-CN'
-        })
+      // 使用统一API客户端获取连接详情
+      httpClient.setAuthTokenGetter(() => authSession.access_token)
+      const connectionDetails = await apiPost('api', '/v1/livekit/connection-details', {
+        room_config: appConfig.agentName ? {
+          agents: [{ agent_name: appConfig.agentName }]
+        } : undefined,
+        title: appConfig.title || '新录音会话',
+        language: appConfig.language || 'zh-CN'
       })
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`获取连接详情失败: ${response.status} ${errorText}`)
-      }
-
-      const connectionDetails = await response.json()
       
       console.log('✅ LiveKit连接详情获取成功:', connectionDetails)
       

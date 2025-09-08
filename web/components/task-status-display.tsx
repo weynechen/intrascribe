@@ -5,12 +5,13 @@ import { Badge } from './ui/badge'
 import { Progress } from './ui/progress'
 import { toast } from 'sonner'
 import { TaskStatusResponse, getTaskStatus } from '@/lib/api-types'
+import { apiGet, httpClient } from '@/lib/api-client'
+import { supabase } from '@/lib/supabase-client'
 
 // Task result type
 interface TaskResult {
   [key: string]: unknown
 }
-import { supabase } from '@/lib/supabase'
 
 interface TaskStatusDisplayProps {
   taskId: string
@@ -54,18 +55,9 @@ export function TaskStatusDisplay({
           throw new Error('未找到认证令牌')
         }
         
-        const response = await fetch(`/api/v2/tasks/${taskId}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        })
-        
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`)
-        }
-        
-        const status: TaskStatusResponse = await response.json()
+        // 设置认证token并使用统一API客户端
+        httpClient.setAuthTokenGetter(() => token)
+        const status: TaskStatusResponse = await apiGet('api', `/v2/tasks/${taskId}`)
         setTaskStatus(status)
         
         const taskInfo = getTaskStatus(status)
@@ -147,17 +139,10 @@ export function TaskStatusDisplay({
       const token = await getAuthToken()
       if (!token) return
       
-      const response = await fetch(`/api/v2/tasks/${taskId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      })
-      
-      if (response.ok) {
-        toast.info('任务取消请求已提交')
-      }
+      // 使用统一API客户端取消任务
+      httpClient.setAuthTokenGetter(() => token)
+      await httpClient.delete('api', `/v2/tasks/${taskId}`)
+      toast.info('任务取消请求已提交')
     } catch (error) {
       console.error('取消任务失败:', error)
       toast.error('取消任务失败')

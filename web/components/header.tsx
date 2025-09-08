@@ -5,6 +5,7 @@ import { MessageSquare, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { AudioPlayer } from './audio-player'
 import { useAuth } from '@/hooks/useAuth'
+import { apiGet, httpClient } from '@/lib/api-client'
 import { toast } from 'sonner'
 
 interface HeaderProps {
@@ -52,53 +53,35 @@ export function Header({
       
       console.log('🔍 检查会话音频文件:', sessionId)
 
-      // 使用useAuth中的session获取token
-      const token = session?.access_token
-
-      const response = await fetch(`/api/v1/sessions/${sessionId}/audio_files`, {
-        headers: {
-          ...(token && { 'Authorization': `Bearer ${token}` })
-        }
-      })
+      // 使用统一的API客户端获取音频文件
+      // 设置认证token获取器
+      httpClient.setAuthTokenGetter(() => session?.access_token || null)
       
-      console.log('🌐 Audio files API响应:', {
-        status: response.status,
-        statusText: response.statusText,
-        sessionId: sessionId,
-        hasToken: !!token
-      })
-      
-      if (response.ok) {
-        const data = await response.json()
-        console.log('📊 Audio files数据:', data)
+      const data = await apiGet('api', `/v1/sessions/${sessionId}/audio_files`)
+      console.log('📊 Audio files数据:', data)
         
-        if (data && data.length > 0) {
-          const audioFile = data[0] // 取第一个音频文件
-          console.log('📁 找到音频文件:', audioFile)
-          
-          // 将原始URL转换为通过代理访问的URL
-          const originalUrl = audioFile.public_url
-          let proxyUrl = originalUrl
-          
-          // 如果是HTTP地址，转换为代理路径
-          //TODO：历史遗留，后续可去掉
-          if (originalUrl && originalUrl.startsWith('http://localhost:54321/')) {
-            proxyUrl = originalUrl.replace('http://localhost:54321/', '/')
-          } else if (originalUrl && originalUrl.includes('localhost:54321')) {
-            // 处理其他可能的格式
-            proxyUrl = originalUrl.replace(/https?:\/\/[^/]*localhost:54321\//, '/')
-          }
-          
-          setAudioUrl(proxyUrl)
-          setHasAudio(true)
-          console.log('✅ 音频URL已设置:', proxyUrl, '(原始URL:', originalUrl, ')')
-        } else {
-          console.log('📭 该会话暂无音频文件')
-          setHasAudio(false)
-          setAudioUrl(undefined)
+      if (data && data.length > 0) {
+        const audioFile = data[0] // 取第一个音频文件
+        console.log('📁 找到音频文件:', audioFile)
+        
+        // 将原始URL转换为通过代理访问的URL
+        const originalUrl = audioFile.public_url
+        let proxyUrl = originalUrl
+        
+        // 如果是HTTP地址，转换为代理路径
+        //TODO：历史遗留，后续可去掉
+        if (originalUrl && originalUrl.startsWith('http://localhost:54321/')) {
+          proxyUrl = originalUrl.replace('http://localhost:54321/', '/')
+        } else if (originalUrl && originalUrl.includes('localhost:54321')) {
+          // 处理其他可能的格式
+          proxyUrl = originalUrl.replace(/https?:\/\/[^/]*localhost:54321\//, '/')
         }
+        
+        setAudioUrl(proxyUrl)
+        setHasAudio(true)
+        console.log('✅ 音频URL已设置:', proxyUrl, '(原始URL:', originalUrl, ')')
       } else {
-        console.error('❌ 获取音频文件API失败:', response.status, response.statusText)
+        console.log('📭 该会话暂无音频文件')
         setHasAudio(false)
         setAudioUrl(undefined)
       }
@@ -204,22 +187,15 @@ export function Header({
         lastModified: file.lastModified
       })
       
-      // Direct call to backend API with proper authentication
-      // Note: Don't set Content-Type header for FormData, browser will set it automatically
-      const response = await fetch('/api/v1/transcriptions/batch', {
+      // 使用统一的API客户端进行文件上传
+      // 设置认证token
+      httpClient.setAuthTokenGetter(() => token)
+      
+      // API客户端会自动检测FormData并正确设置headers
+      const result = await httpClient.apiServer('/v1/transcriptions/batch', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
         body: formData
       })
-      
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || '批量转录失败')
-      }
-      
-      const result = await response.json()
       console.log('✅ 批量转录完成:', result)
       
               // Display detailed success message with statistics
