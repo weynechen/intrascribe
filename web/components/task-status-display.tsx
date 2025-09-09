@@ -5,11 +5,17 @@ import { Badge } from './ui/badge'
 import { Progress } from './ui/progress'
 import { toast } from 'sonner'
 import { TaskStatusResponse, getTaskStatus } from '@/lib/api-types'
-import { supabase } from '@/lib/supabase'
+import { apiGet, httpClient } from '@/lib/api-client'
+import { supabase } from '@/lib/supabase-client'
+
+// Task result type
+interface TaskResult {
+  [key: string]: unknown
+}
 
 interface TaskStatusDisplayProps {
   taskId: string
-  onComplete?: (result: any) => void
+  onComplete?: (result: TaskResult) => void
   onError?: (error: string) => void
   onCancel?: () => void
   showProgress?: boolean
@@ -40,7 +46,7 @@ export function TaskStatusDisplay({
   useEffect(() => {
     if (!taskId) return
     
-    let pollInterval: NodeJS.Timeout
+    let intervalId: NodeJS.Timeout | null = null
     
     const pollTaskStatus = async () => {
       try {
@@ -49,18 +55,9 @@ export function TaskStatusDisplay({
           throw new Error('未找到认证令牌')
         }
         
-        const response = await fetch(`/api/v2/tasks/${taskId}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        })
-        
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`)
-        }
-        
-        const status: TaskStatusResponse = await response.json()
+        // 设置认证token并使用统一API客户端
+        httpClient.setAuthTokenGetter(() => token)
+        const status: TaskStatusResponse = await apiGet('api', `/v2/tasks/${taskId}`)
         setTaskStatus(status)
         
         const taskInfo = getTaskStatus(status)
@@ -75,7 +72,7 @@ export function TaskStatusDisplay({
         
         // 处理任务完成
         if (taskInfo.isCompleted) {
-          clearInterval(pollInterval)
+          if (intervalId) clearInterval(intervalId)
           setProgress(100)
           
           if (status.result && onComplete) {
@@ -89,7 +86,7 @@ export function TaskStatusDisplay({
         
         // 处理任务失败
         if (taskInfo.isFailed) {
-          clearInterval(pollInterval)
+          if (intervalId) clearInterval(intervalId)
           
           const error = status.error || '任务执行失败'
           toast.error(error)
@@ -101,7 +98,7 @@ export function TaskStatusDisplay({
         
         // 处理任务取消
         if (taskInfo.isCancelled) {
-          clearInterval(pollInterval)
+          if (intervalId) clearInterval(intervalId)
           
           toast.info('任务已取消')
           
@@ -112,7 +109,7 @@ export function TaskStatusDisplay({
         
       } catch (error) {
         console.error('轮询任务状态失败:', error)
-        clearInterval(pollInterval)
+        if (intervalId) clearInterval(intervalId)
         
         const errorMsg = error instanceof Error ? error.message : '获取任务状态失败'
         toast.error(errorMsg)
@@ -127,11 +124,11 @@ export function TaskStatusDisplay({
     pollTaskStatus()
     
     // 设置轮询间隔
-    pollInterval = setInterval(pollTaskStatus, 2000)
+    intervalId = setInterval(pollTaskStatus, 2000)
     
     return () => {
-      if (pollInterval) {
-        clearInterval(pollInterval)
+      if (intervalId) {
+        clearInterval(intervalId)
       }
     }
   }, [taskId, onComplete, onError, onCancel, autoHide, progress])
@@ -142,17 +139,10 @@ export function TaskStatusDisplay({
       const token = await getAuthToken()
       if (!token) return
       
-      const response = await fetch(`/api/v2/tasks/${taskId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      })
-      
-      if (response.ok) {
-        toast.info('任务取消请求已提交')
-      }
+      // 使用统一API客户端取消任务
+      httpClient.setAuthTokenGetter(() => token)
+      await httpClient.delete('api', `/v2/tasks/${taskId}`)
+      toast.info('任务取消请求已提交')
     } catch (error) {
       console.error('取消任务失败:', error)
       toast.error('取消任务失败')

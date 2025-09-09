@@ -7,7 +7,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { useAuth } from '@/hooks/useAuth'
-import { SocialLoginButtons } from './social-login-buttons'
 
 interface LoginFormProps {
   onToggleMode: () => void
@@ -57,7 +56,7 @@ export function LoginForm({ onToggleMode, onForgotPassword }: LoginFormProps) {
       )}
 
       {/* 社交登录按钮 */}
-      <SocialLoginButtons />
+      {/* <SocialLoginButtons /> */}
 
       {/* 分隔线 */}
       <div className="relative">

@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { FileText, Star, Eye } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/hooks/useAuth'
-import { SummaryTemplate, APIClient } from '@/lib/supabase'
+import { SummaryTemplate, apiServerClient } from '@/lib/api-server-client'
 
 interface TemplateSelectorProps {
   selectedTemplateId?: string
@@ -27,43 +27,18 @@ export function TemplateSelector({
   const [templates, setTemplates] = useState<SummaryTemplate[]>([])
   const [loading, setLoading] = useState(true)
   // const [previewTemplate, setPreviewTemplate] = useState<SummaryTemplate | null>(null)
-  const [apiClient, setApiClient] = useState<APIClient | null>(null)
-
-  // 初始化API客户端
-  useEffect(() => {
-    console.log('🔑 Template-selector认证状态:', {
-      hasSession: !!session,
-      hasAccessToken: !!session?.access_token,
-      tokenPreview: session?.access_token ? `${session.access_token.substring(0, 20)}...` : null
-    })
-    
-    if (session?.access_token) {
-      const client = new APIClient('/api/v1', () => session.access_token)
-      setApiClient(client)
-    } else {
-      console.warn('⚠️ 无法创建API客户端：缺少认证token')
-      setApiClient(null)
-    }
-  }, [session?.access_token])
-
-  // 加载模板
+  // Load templates
   const loadTemplates = useCallback(async () => {
-    if (!apiClient) {
-      console.warn('⚠️ API客户端未初始化，跳过模板加载')
-      return
-    }
-    
     if (!session?.access_token) {
-      console.warn('⚠️ 用户未认证，跳过模板加载')
       return
     }
 
     try {
       setLoading(true)
-      console.log('🔄 开始加载模板...')
-      const templatesData = await apiClient.getTemplates()
+      apiServerClient.setAuthToken(session?.access_token || null)
+      const templatesData = await apiServerClient.getTemplates()
       
-      // 过滤掉默认模板，只显示用户自定义模板
+      // Filter out default templates, only show user custom templates
       const userTemplates = templatesData.filter(template => !template.is_default)
       setTemplates(userTemplates)
       
@@ -81,11 +56,11 @@ export function TemplateSelector({
     } finally {
       setLoading(false)
     }
-  }, [apiClient, selectedTemplateId, onTemplateChange, session?.access_token])
+  }, [session?.access_token])
 
   useEffect(() => {
     loadTemplates()
-  }, [loadTemplates])
+  }, [loadTemplates, session])
 
   const handleGenerateClick = () => {
     console.log('🔍 模板选择器调试:', {

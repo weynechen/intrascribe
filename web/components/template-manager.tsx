@@ -341,23 +341,24 @@ export function TemplateManager({ onTemplateSelect }: TemplateManagerProps) {
 
       toast.success('模板已添加到您的模板库')
       loadTemplates()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('复制系统模板失败:', error)
       
       // 针对外键约束错误的特殊处理
-      if (error?.code === '23503' && error?.details?.includes('users')) {
+      const errorObj = error as { code?: string; details?: string; message?: string }
+      if (errorObj?.code === '23503' && errorObj?.details?.includes('users')) {
         toast.error('用户数据同步异常，请重新登录后重试')
-      } else if (error?.message?.includes('duplicate key') || error?.code === '23505' || error?.message?.includes('summary_templates_user_name_content_unique')) {
+      } else if (errorObj?.message?.includes('duplicate key') || errorObj?.code === '23505' || errorObj?.message?.includes('summary_templates_user_name_content_unique')) {
         toast.error('您已经复制过此模板了')
         // 重新加载模板列表，确保UI状态一致
         loadTemplates()
-      } else if (error?.code === '406') {
+      } else if (errorObj?.code === '406') {
         // HTTP 406 错误通常是查询参数问题，但操作可能已成功
         console.warn('查询参数错误，但操作可能已成功:', error)
         toast.success('模板已添加到您的模板库')
         loadTemplates()
       } else {
-        toast.error('添加模板失败: ' + (error?.message || '未知错误'))
+        toast.error('添加模板失败: ' + (errorObj?.message || '未知错误'))
       }
     }
   }

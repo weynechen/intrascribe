@@ -8,8 +8,8 @@ import { Toaster } from 'sonner'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: '语音转录助手 - 实时语音转文字AI总结',
-  description: '基于 Next.js + FastRTC 构建的实时语音转录Web应用，支持AI智能总结',
+  title: 'Voice Transcription Assistant - Real-time Speech to Text with AI Summary',
+  description: 'Real-time voice transcription web application built with Next.js + FastRTC, supporting AI intelligent summary',
 }
 
 export default function RootLayout({

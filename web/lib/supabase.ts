@@ -1,17 +1,16 @@
 import { createClient } from '@supabase/supabase-js'
 import {
-  SyncResponse, AsyncResponse, TaskStatusResponse,
+  TaskStatusResponse, SessionData,
   SessionCreateResponse, SessionDeleteResponse, SessionFinalizeResponse,
-  AsyncAIResponse, AsyncTranscriptionResponse,
-  AISummaryResponse, AISummaryData,
-  isAsyncResponse, isSyncResponse, isTaskStatusResponse,
+  AISummaryResponse,
+  isSyncResponse,
   getTaskStatus
 } from './api-types'
 
-// 始终使用Next.js代理，无论HTTP还是HTTPS都能正常工作
+// Always use Next.js proxy, works with both HTTP and HTTPS
 const supabaseUrl = typeof window !== 'undefined' 
-  ? `${window.location.origin}/supabase`  // 浏览器环境：使用当前域名 + 代理路径
-  : 'http://localhost:3000/supabase'      // 服务器环境：使用本地地址 + 代理路径
+  ? `${window.location.origin}/supabase`  // Browser environment: use current domain + proxy path
+  : 'http://localhost:3000/supabase'      // Server environment: use local address + proxy path
 
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
@@ -19,19 +18,19 @@ if (!supabaseAnonKey) {
   throw new Error('Missing NEXT_PUBLIC_SUPABASE_ANON_KEY environment variable')
 }
 
-// 全局单例模式：确保只创建一个Supabase客户端实例
+// Global singleton pattern: ensure only one Supabase client instance is created
 let supabaseInstance: ReturnType<typeof createClient> | null = null
 let isCreating = false
 
 function createSupabaseClient(): ReturnType<typeof createClient> {
-  // 如果实例已存在，直接返回
+  // If instance already exists, return directly
   if (supabaseInstance) {
     return supabaseInstance
   }
 
-  // 防止并发创建多个实例 - 简化处理
+  // Prevent concurrent creation of multiple instances - simplified handling
   if (isCreating) {
-    // 如果正在创建，直接创建一个新的客户端实例
+    // If currently creating, directly create a new client instance
     return createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
         autoRefreshToken: true,
@@ -68,45 +67,40 @@ function createSupabaseClient(): ReturnType<typeof createClient> {
       }
     })
 
-    console.log('🔗 Supabase客户端已初始化')
     return supabaseInstance
   } finally {
     isCreating = false
   }
 }
 
-// 导出单例实例
+// Export singleton instance
 export const supabase = createSupabaseClient()
 
-// 确保在全局范围内只有一个实例
+// Ensure only one instance globally
 if (typeof window !== 'undefined') {
   const globalWindow = window as { __supabase?: typeof supabase }
   if (!globalWindow.__supabase) {
     globalWindow.__supabase = supabase
   } else {
-    console.warn('检测到已存在的Supabase实例，使用现有实例')
   }
 }
 
-// 页面刷新和卸载清理
+// Page refresh and unload cleanup
 if (typeof window !== 'undefined') {
-  // 页面刷新前清理所有订阅
+  // Clean up all subscriptions before page refresh
   window.addEventListener('beforeunload', () => {
-    console.log('🔄 页面即将刷新，清理所有订阅')
     subscriptionManager.cleanupAllChannels()
   })
   
-  // 页面隐藏时暂停订阅
+  // Pause subscriptions when page is hidden
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
-      console.log('📴 页面隐藏，暂停订阅活动')
     } else {
-      console.log('👁️ 页面可见，恢复订阅活动')
     }
   })
 }
 
-// 全局订阅管理器，防止重复订阅
+// Global subscription manager to prevent duplicate subscriptions
 interface RealtimePayload {
   eventType: string
   table: string
@@ -119,15 +113,12 @@ const subscriptionManager = {
   activeChannels: new Map<string, ReturnType<typeof supabase.channel>>(),
   
   createChannel(channelName: string, userId: string, callback: (payload: RealtimePayload) => void) {
-    // 检查是否已存在相同的订阅
+    // Check if the same subscription already exists
     if (this.activeChannels.has(channelName)) {
-      console.warn(`频道 ${channelName} 已存在，返回现有订阅`)
       return this.activeChannels.get(channelName)
     }
 
     try {
-      console.log(`🔧 正在创建频道: ${channelName}, 用户ID: ${userId}`)
-      console.log(`🔧 订阅配置: schema=public, table=recording_sessions, filter=user_id=eq.${userId}`)
       
       const channel = supabase
         .channel(channelName)
@@ -137,66 +128,46 @@ const subscriptionManager = {
           table: 'recording_sessions',
           filter: `user_id=eq.${userId}`
         }, (payload: RealtimePayload) => {
-          // 防护措施：检查页面是否仍然可见
+          // Safety measure: check if page is still visible
           if (typeof document !== 'undefined' && document.hidden) {
-            console.log(`⏸️ 页面隐藏中，跳过实时事件处理: ${channelName}`)
             return
           }
           
-          console.log(`🎯 频道 ${channelName} 收到实时事件:`, {
-            eventType: payload.eventType,
-            table: payload.table,
-            schema: payload.schema,
-            newId: payload.new?.id,
-            oldId: payload.old?.id,
-            newStatus: payload.new?.status,
-            timestamp: new Date().toISOString()
-          })
           
           try {
             callback(payload)
           } catch (error) {
-            console.error(`❌ 处理实时事件回调失败:`, error)
           }
         })
         .subscribe((status: string) => {
-          console.log(`📡 频道 ${channelName} 订阅状态变化:`, status)
           if (status === 'SUBSCRIBED') {
-            console.log(`✅ 频道 ${channelName} 订阅成功`)
           } else if (status === 'CHANNEL_ERROR') {
-            console.error(`❌ 频道 ${channelName} 订阅失败`)
-            // 订阅失败时自动清理
+            // Auto cleanup on subscription failure
             this.removeChannel(channelName)
           } else if (status === 'TIMED_OUT') {
-            console.error(`⏰ 频道 ${channelName} 订阅超时`)
-            // 超时时自动清理并重试
+            // Auto cleanup and retry on timeout
             this.removeChannel(channelName)
           } else if (status === 'CLOSED') {
-            console.log(`🔒 频道 ${channelName} 订阅已关闭`)
-            // 确保从映射中移除
+            // Ensure removal from mapping
             this.activeChannels.delete(channelName)
           }
         })
 
       this.activeChannels.set(channelName, channel)
-      console.log(`✅ 创建新频道: ${channelName}`)
       return channel
     } catch (error) {
-      console.error(`创建频道失败: ${channelName}`, error)
       return null
     }
   },
 
-  // 创建转录表订阅频道
+  // Create transcription table subscription channel
   createTranscriptionChannel(channelName: string, sessionIds: string[], callback: (payload: RealtimePayload) => void) {
-    // 检查是否已存在相同的订阅
+    // Check if the same subscription already exists
     if (this.activeChannels.has(channelName)) {
-      console.warn(`转录频道 ${channelName} 已存在，返回现有订阅`)
       return this.activeChannels.get(channelName)
     }
 
     try {
-      console.log(`🔧 正在创建转录频道: ${channelName}, 监听会话IDs: ${sessionIds.slice(0, 3)}...`)
       
       const channel = supabase
         .channel(channelName)
@@ -205,56 +176,36 @@ const subscriptionManager = {
           schema: 'public',
           table: 'transcriptions'
         }, (payload: RealtimePayload) => {
-          // 防护措施：检查页面是否仍然可见
+          // Safety measure: check if page is still visible
           if (typeof document !== 'undefined' && document.hidden) {
-            console.log(`⏸️ 页面隐藏中，跳过转录实时事件处理: ${channelName}`)
             return
           }
 
-          // 检查是否是我们关心的会话的转录更新
+          // Check if it's a transcription update for sessions we care about
           const sessionId = payload.new?.session_id || payload.old?.session_id
           if (sessionId && typeof sessionId === 'string' && sessionIds.includes(sessionId)) {
-            console.log(`🎯 转录频道 ${channelName} 收到相关实时事件:`, {
-              eventType: payload.eventType,
-              table: payload.table,
-              sessionId: sessionId,
-              transcriptionId: payload.new?.id || payload.old?.id,
-              timestamp: new Date().toISOString()
-            })
             
             try {
               callback(payload)
             } catch (error) {
-              console.error(`❌ 处理转录实时事件回调失败:`, error)
             }
           } else {
-            console.log(`🔍 转录事件不匹配当前会话，跳过处理`, {
-              eventSessionId: sessionId,
-              targetSessionIds: sessionIds.slice(0, 3)
-            })
           }
         })
         .subscribe((status: string) => {
-          console.log(`📡 转录频道 ${channelName} 订阅状态变化:`, status)
           if (status === 'SUBSCRIBED') {
-            console.log(`✅ 转录频道 ${channelName} 订阅成功`)
           } else if (status === 'CHANNEL_ERROR') {
-            console.error(`❌ 转录频道 ${channelName} 订阅失败`)
             this.removeChannel(channelName)
           } else if (status === 'TIMED_OUT') {
-            console.error(`⏰ 转录频道 ${channelName} 订阅超时`)
             this.removeChannel(channelName)
           } else if (status === 'CLOSED') {
-            console.log(`🔒 转录频道 ${channelName} 订阅已关闭`)
             this.activeChannels.delete(channelName)
           }
         })
 
       this.activeChannels.set(channelName, channel)
-      console.log(`✅ 创建新转录频道: ${channelName}`)
       return channel
     } catch (error) {
-      console.error(`创建转录频道失败: ${channelName}`, error)
       return null
     }
   },
@@ -263,32 +214,26 @@ const subscriptionManager = {
     const channel = this.activeChannels.get(channelName)
     if (channel) {
       try {
-        console.log(`🔄 正在移除频道: ${channelName}`)
         channel.unsubscribe()
         this.activeChannels.delete(channelName)
-        console.log(`🗑️ 移除频道成功: ${channelName}`)
       } catch (error) {
-        console.error(`移除频道失败: ${channelName}`, error)
-        // 即使unsubscribe失败，也要从映射中移除
+        // Remove from mapping even if unsubscribe fails
         this.activeChannels.delete(channelName)
       }
     } else {
-      console.log(`⚠️ 频道不存在，无需移除: ${channelName}`)
     }
   },
 
-  // 清理所有频道
+  // Clean up all channels
   cleanupAllChannels() {
     const channelNames = Array.from(this.activeChannels.keys())
-    console.log(`🧹 清理所有频道，共 ${channelNames.length} 个`)
     
     channelNames.forEach(channelName => {
       this.removeChannel(channelName)
     })
     
-    // 强制清空映射
+    // Force clear mapping
     this.activeChannels.clear()
-    console.log('✅ 所有频道清理完成')
   },
 
   getActiveChannels() {
@@ -490,8 +435,8 @@ export interface RecordingSessionWithRelations extends RecordingSession {
   ai_summaries?: AISummary[]
 }
 
-// API 响应类型
-export interface SessionCreateResponse {
+// Local session data interface for legacy compatibility
+interface LocalSessionCreateResponse {
   session_id: string
   title: string
   status: string
@@ -500,17 +445,6 @@ export interface SessionCreateResponse {
   usage_hint: string
 }
 
-export interface SessionFinalizeResponse {
-  message: string
-  session_id: string
-  status: string
-  final_data: {
-    total_duration_seconds: number
-    word_count: number
-    audio_file_path: string
-    transcription_saved: boolean
-  }
-}
 
 // 实时转录数据类型
 export interface TranscriptEvent {
@@ -522,18 +456,6 @@ export interface TranscriptEvent {
 }
 
 // AI 服务响应类型
-export interface AISummaryResponse {
-  summary: string
-  metadata: {
-    model_used: string
-    success: boolean
-    total_processing_time: number
-    transcription_length: number
-    timestamp: number
-    error?: string
-    fallback_used?: boolean
-  }
-}
 
 export interface AITitleResponse {
   title: string
@@ -636,7 +558,7 @@ export class APIClient {
 
   // 会话管理
   async createSession(title: string, language: string = 'zh-CN', sttModel: string = 'whisper'): Promise<SessionCreateResponse> {
-    const response = await this.request<SessionCreateResponse>('/sessions', {
+    const response = await this.request<LocalSessionCreateResponse>('/sessions', {
       method: 'POST',
       body: JSON.stringify({
         title,
@@ -648,14 +570,14 @@ export class APIClient {
     // 检查响应格式并适配
     if (isSyncResponse(response)) {
       // 新的统一响应格式
-      return response
+      return response as SessionCreateResponse
     } else {
       // 兼容旧格式，包装成新格式
       return {
         success: true,
         message: "会话创建成功",
         timestamp: new Date().toISOString(),
-        data: response as any
+        data: response as SessionData
       }
     }
   }
@@ -731,13 +653,15 @@ export class APIClient {
   }
 
   // 响应格式检测和处理
-  private isAsyncResponse(response: any): boolean {
-    return response && typeof response === 'object' && 
+  private isAsyncResponse(response: unknown): boolean {
+    return typeof response === 'object' && 
+           response !== null && 
            'task_id' in response && 'poll_url' in response
   }
   
-  private isSyncResponse(response: any): boolean {
-    return response && typeof response === 'object' && 
+  private isSyncResponse(response: unknown): boolean {
+    return typeof response === 'object' && 
+           response !== null && 
            'data' in response && !('task_id' in response)
   }
 
@@ -768,10 +692,11 @@ export class APIClient {
     if (this.isAsyncResponse(data)) {
       console.log('🔄 检测到异步响应，开始轮询:', data.task_id)
       const result = await this.pollV2TaskStatus(data.task_id)
+      const summaryResult = result as { summary: string; key_points?: string[]; metadata?: Record<string, unknown> }
       return {
-        summary: result.summary,
-        key_points: result.key_points || [],
-        metadata: result.metadata || {}
+        summary: summaryResult.summary,
+        key_points: summaryResult.key_points || [],
+        metadata: summaryResult.metadata || {}
       }
     } else {
       // 直接返回同步响应
@@ -785,7 +710,7 @@ export class APIClient {
   }
 
   // 轮询V2任务状态的辅助方法
-  private async pollV2TaskStatus(taskId: string, maxAttempts: number = 120): Promise<any> {
+  private async pollV2TaskStatus(taskId: string, maxAttempts: number = 120): Promise<unknown> {
     const baseURL = this.baseURL.replace('/v1', '') // 移除v1，直接访问v2
     
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -806,42 +731,31 @@ export class APIClient {
         console.log(`🔄 V2任务状态轮询 ${attempt + 1}/${maxAttempts}:`, taskStatusResponse.status)
 
         // 使用新的类型守卫和工具函数
-        if (isTaskStatusResponse(taskStatusResponse)) {
-          const status = getTaskStatus(taskStatusResponse)
-          
-          // 任务完成
-          if (status.isCompleted && taskStatusResponse.result) {
-            console.log('✅ V2任务完成，返回结果')
-            return taskStatusResponse.result
-          }
+        const status = getTaskStatus(taskStatusResponse)
+        
+        // 任务完成
+        if (status.isCompleted && taskStatusResponse.result) {
+          console.log('✅ V2任务完成，返回结果')
+          return taskStatusResponse.result
+        }
 
-          // 任务失败
-          if (status.isFailed) {
-            console.error('❌ V2任务失败:', taskStatusResponse.error)
-            throw new Error(taskStatusResponse.error || '任务执行失败')
-          }
+        // 任务失败
+        if (status.isFailed) {
+          console.error('❌ V2任务失败:', taskStatusResponse.error)
+          throw new Error(taskStatusResponse.error || '任务执行失败')
+        }
 
-          // 任务被取消
-          if (status.isCancelled) {
-            console.warn('⚠️ V2任务被取消')
-            throw new Error('任务被取消')
-          }
+        // 任务被取消
+        if (status.isCancelled) {
+          console.warn('⚠️ V2任务被取消')
+          throw new Error('任务被取消')
+        }
 
-          // 任务仍在进行中
-          if (status.isPending) {
-            console.log('⏳ V2任务进行中:', taskStatusResponse.progress)
-            await new Promise(resolve => setTimeout(resolve, 3000))
-            continue
-          }
-        } else {
-          // 兼容旧的响应格式
-          if (taskStatusResponse.status === 'success' && (taskStatusResponse as any).result) {
-            return (taskStatusResponse as any).result
-          }
-          
-          if (taskStatusResponse.status === 'failure') {
-            throw new Error(taskStatusResponse.error || '任务执行失败')
-          }
+        // 任务仍在进行中
+        if (status.isPending) {
+          console.log('⏳ V2任务进行中:', taskStatusResponse.progress)
+          await new Promise(resolve => setTimeout(resolve, 3000))
+          continue
         }
         
         console.warn('⚠️ 未知任务状态:', taskStatusResponse.status)
@@ -924,9 +838,10 @@ export class APIClient {
       // 轮询任务状态
       const result = await this.pollV2TaskStatus(taskData.task_id)
       console.log('✅ V2 AI总结生成完成')
-
+      
+      const summaryResult = result as { summary: string }
       return {
-        summary: result.summary,
+        summary: summaryResult.summary,
         metadata: { generated_by: 'v2_async_task' }
       }
     } catch (error) {
@@ -1073,7 +988,8 @@ export class APIClient {
         return await this.request<{ success: boolean; message: string; session_id: string; status: string }>(`/sessions/${sessionId}/retranscribe`, {
           method: 'POST'
         })
-      } catch (v1Error) {
+      } catch (error) {
+        console.warn('V1 retranscribe API also failed:', error)
         return {
           success: false,
           message: "重新转录功能暂时不可用",

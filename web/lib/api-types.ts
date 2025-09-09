@@ -13,11 +13,11 @@ export interface BaseResponse {
 
 // =============== 同步接口响应格式 ===============
 
-export interface SyncResponse<T = any> extends BaseResponse {
+export interface SyncResponse<T = unknown> extends BaseResponse {
   data: T
 }
 
-export interface SyncListResponse<T = any> extends BaseResponse {
+export interface SyncListResponse<T = unknown> extends BaseResponse {
   data: T[]
   total?: number
   page?: number
@@ -42,10 +42,10 @@ export interface TaskStatusResponse extends BaseResponse {
     current?: number
     total?: number
     description?: string
-    [key: string]: any
+    [key: string]: unknown
   }
   result?: {
-    [key: string]: any
+    [key: string]: unknown
   }
   error?: string
   created_at?: string
@@ -68,7 +68,7 @@ export interface ErrorResponse extends BaseResponse {
   error_code?: string
   error_type?: string
   details?: {
-    [key: string]: any
+    [key: string]: unknown
   }
 }
 
@@ -84,18 +84,19 @@ export interface SessionData {
   usage_hint?: string
 }
 
-export interface SessionCreateResponse extends SyncResponse<SessionData> {}
+export type SessionCreateResponse = SyncResponse<SessionData>
 
-export interface SessionUpdateResponse extends SyncResponse<SessionData> {}
+export type SessionUpdateResponse = SyncResponse<SessionData>
 
-export interface SessionDeleteResponse extends SyncResponse<{
+export type SessionDeleteResponse = SyncResponse<{
   session_id: string
   deleted: boolean
-}> {}
+}>
 
 // 会话异步操作响应
-export interface AsyncSessionResponse extends AsyncResponse {
+export type AsyncSessionResponse = AsyncResponse & {
   // 继承基础异步响应，可添加会话特定字段
+  data?: SessionData
 }
 
 // AI服务相关
@@ -106,12 +107,13 @@ export interface AISummaryData {
     model_used?: string
     processing_time?: number
     template_used?: string
-    [key: string]: any
+    [key: string]: unknown
   }
 }
 
 export interface AsyncAIResponse extends AsyncResponse {
   // 继承基础异步响应，可添加AI特定字段
+  data?: AISummaryData
 }
 
 // 转录相关
@@ -136,6 +138,7 @@ export interface TranscriptionSegment {
 
 export interface AsyncTranscriptionResponse extends AsyncResponse {
   // 继承基础异步响应，可添加转录特定字段
+  data?: TranscriptionData
 }
 
 // 批量转录响应
@@ -158,29 +161,30 @@ export interface BatchTranscriptionData {
 
 // =============== 响应格式检测类型守卫 ===============
 
-export function isAsyncResponse(response: any): response is AsyncResponse {
-  return response && 
-         typeof response === 'object' && 
+export function isAsyncResponse(response: unknown): response is AsyncResponse {
+  return typeof response === 'object' && 
+         response !== null && 
          'task_id' in response && 
          'poll_url' in response
 }
 
-export function isSyncResponse(response: any): response is SyncResponse {
-  return response && 
-         typeof response === 'object' && 
+export function isSyncResponse(response: unknown): response is SyncResponse {
+  return typeof response === 'object' && 
+         response !== null && 
          'data' in response && 
          !('task_id' in response)
 }
 
-export function isErrorResponse(response: any): response is ErrorResponse {
-  return response && 
-         typeof response === 'object' && 
-         response.success === false
+export function isErrorResponse(response: unknown): response is ErrorResponse {
+  return typeof response === 'object' && 
+         response !== null && 
+         'success' in response && 
+         (response as { success: boolean }).success === false
 }
 
-export function isTaskStatusResponse(response: any): response is TaskStatusResponse {
-  return response && 
-         typeof response === 'object' && 
+export function isTaskStatusResponse(response: unknown): response is TaskStatusResponse {
+  return typeof response === 'object' && 
+         response !== null && 
          'task_id' in response && 
          'status' in response && 
          !('poll_url' in response)
@@ -204,7 +208,7 @@ export interface SessionFinalizeResponse {
   message: string
   session_id: string
   status: string
-  final_data: any
+  final_data: unknown
 }
 
 export interface AISummaryResponse {
@@ -218,7 +222,7 @@ export interface AISummaryResponse {
     timestamp?: number
     error?: string
     fallback_used?: boolean
-    [key: string]: any
+    [key: string]: unknown
   }
 }
 
