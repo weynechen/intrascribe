@@ -8,64 +8,67 @@ interface TaskResult {
   summary_id?: string
 }
 
-// 轮询任务状态的辅助函数
+interface TaskStatus {
+  ready: boolean
+  successful?: boolean
+  result?: TaskResult
+  error?: string
+}
+
+interface TaskData {
+  task_id: string
+}
+
+// Helper function to poll task status
 async function pollTaskStatus(taskId: string, maxAttempts: number = 120): Promise<TaskResult> {
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    // 使用统一API客户端查询任务状态
+    // Use unified API client to query task status
     const status = await httpClient.apiServer(`/v2/tasks/${taskId}`, {
       method: 'GET',
-      skipAuth: true // API路由到API路由，不需要认证
-    })
-    console.log(`📊 任务状态检查 (${attempt + 1}/${maxAttempts}):`, status.status)
+      skipAuth: true // API route to API route, no auth needed
+    }) as TaskStatus
     
     if (status.ready) {
-      if (status.successful) {
+      if (status.successful && status.result) {
         return status.result
       } else {
-        throw new Error(status.error || '任务执行失败')
+        throw new Error(status.error || 'Task execution failed')
       }
     }
     
-    // 等待3秒后继续轮询
+    // Wait 3 seconds before continuing polling
     await new Promise(resolve => setTimeout(resolve, 3000))
   }
   
-  throw new Error('任务处理超时')
+  throw new Error('Task processing timeout')
 }
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('📥 收到AI总结请求')
     const { transcription, sessionId, templateId } = await request.json()
-    console.log('📝 转录内容长度:', transcription?.length || 0)
 
     if (!transcription || !sessionId) {
-      console.log('❌ 缺少必要参数')
       return NextResponse.json(
-        { error: '缺少转录内容或会话ID' },
+        { error: 'Missing transcription content or session ID' },
         { status: 400 }
       )
     }
 
-    console.log('🔄 提交V2异步AI总结任务...')
-    // 使用统一API客户端提交异步任务
+    // Use unified API client to submit async task
     const taskData = await httpClient.apiServer(`/v2/sessions/${sessionId}/ai-summary`, {
       method: 'POST',
       body: JSON.stringify({ 
         transcription_text: transcription,
         template_id: templateId || null
       }),
-      skipAuth: true // API路由之间调用，暂时跳过认证
-    })
+      skipAuth: true // API route inter-calls, skip auth temporarily
+    }) as TaskData
     const taskId = taskData.task_id
-    console.log('✅ 异步任务已提交，任务ID:', taskId)
 
-    // 轮询任务状态直到完成
-    console.log('⏳ 开始轮询任务状态...')
+    // Poll task status until completion
     const result = await pollTaskStatus(taskId)
-    console.log('✅ AI总结生成完成')
 
-    // 返回总结结果
+    // Return summary result
     return NextResponse.json({
       summary: result.summary,
       key_points: result.key_points,
@@ -73,10 +76,9 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('总结生成失败:', error)
     
     return NextResponse.json(
-      { error: `总结生成失败: ${error instanceof Error ? error.message : '未知错误'}` },
+      { error: `Summary generation failed: ${error instanceof Error ? error.message : 'Unknown error'}` },
       { status: 500 }
     )
   }

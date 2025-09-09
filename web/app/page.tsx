@@ -7,6 +7,12 @@ declare global {
   }
 }
 
+// API response interface for rename speaker
+interface RenameSpeakerResponse {
+  success: boolean
+  message?: string
+}
+
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
@@ -59,7 +65,7 @@ export default function HomePage() {
     finalizeSession
   } = useRecordingSessions()
   
-  // 创建APIClient实例用于批量转录
+  // Create APIClient instance for batch transcription
   const [apiClient, setApiClient] = useState<{ 
     updateSessionTemplate: (sessionId: string, templateId: string) => Promise<{ message: string; session_id: string; template_id: string }>
     retranscribeSession: (sessionId: string) => Promise<{ success: boolean; message: string; session_id: string; status: string }>
@@ -90,26 +96,25 @@ export default function HomePage() {
   const [aiSummaryId, setAiSummaryId] = useState<string>('')
   const [transcriptionId, setTranscriptionId] = useState<string>('')
   
-  // 添加当前录音会话ID状态
+  // Add current recording session ID state
   const [currentRecordingSessionId, setCurrentRecordingSessionId] = useState<string>('')
   
-  // 音频刷新ref
+  // Audio refresh ref
   const refreshAudioRef = useRef<(() => Promise<void>) | null>(null)
   
-  // 模板选择状态 - 暂时移除未使用的状态
+  // Template selection state - temporarily remove unused state
   // const [selectedTemplateId, setSelectedTemplateId] = useState<string | undefined>()
 
-  // 处理实时转录数据
+  // Handle real-time transcription data
   const handleTranscript = useCallback((transcriptEvent: TranscriptEvent) => {
-    console.log('📝 收到转录数据:', transcriptEvent)
     
     if (transcriptEvent.text.trim()) {
-      // 检查是否是完整文本（录音结束时的汇总）
+      // Check if it's complete text (summary when recording ends)
       if (transcriptEvent.text.length > 100 && transcriptEvent.text.includes(' ') && !transcriptEvent.timestamp) {
-        // 这是录音结束时的完整转录文本
+        // This is the complete transcription text when recording ends
         setFullTranscriptText(transcriptEvent.text)
         
-        // 将完整文本分割成句子显示
+        // Split complete text into sentences for display
         const sentences = transcriptEvent.text.split(/[。！？.!?]/).filter(s => s.trim())
         const transcriptItems = sentences.map((sentence, index) => ({
           id: `final_${index}`,
@@ -120,12 +125,12 @@ export default function HomePage() {
         
         setCurrentTranscript(transcriptItems)
         
-        // 录音结束后，如果有录音会话ID，自动选中它
+        // After recording ends, if there's a recording session ID, automatically select it
         if (currentRecordingSessionId) {
           setSelectedSessionId(currentRecordingSessionId)
         }
       } else {
-        // 实时转录片段 - 使用后端返回的真实数据
+        // Real-time transcription segment - use real data returned from backend
         const newItem: TranscriptItem = {
           id: `live_${transcriptEvent.index}_${Date.now()}`,
           timestamp: transcriptEvent.timestamp || new Date().toLocaleTimeString('zh-CN', { hour12: false }),
@@ -133,18 +138,17 @@ export default function HomePage() {
           text: transcriptEvent.text.trim()
         }
         
-        // 直接追加新的转录项，而不是替换
+        // Directly append new transcription items instead of replacing
         setCurrentTranscript(prev => [...prev, newItem])
       }
     }
   }, [currentRecordingSessionId])
 
   const handleRecordingStateChange = useCallback(async (recording: boolean) => {
-    console.log('🎙️录音状态变化:', recording)
     setIsRecording(recording)
     
     if (recording) {
-      // 开始录音 - 清空当前状态
+      // Start recording - clear current state
       setCurrentTranscript([])
       setFullTranscriptText('')
       setAiSummary('')
@@ -152,69 +156,60 @@ export default function HomePage() {
       setAiSummaryId('')
       setTranscriptionId('')
       setShowAISummaryPanel(false)
-      // 不清空selectedSessionId，让用户可以看到当前选中的会话
+      // Don't clear selectedSessionId, let user see currently selected session
     } else {
-      // 录音结束 - 调用finalize session保存转录数据
-      console.log('🏁 录音已结束，准备处理数据')
-      toast.info('录音已结束，正在保存转录数据...', {
+      // Recording ended - call finalize session to save transcription data
+      toast.info('Recording ended, saving transcription data...', {
         duration: 5000
       })
       
-      // 调用finalize session将Redis数据保存到数据库
+      // Call finalize session to save Redis data to database
       if (currentRecordingSessionId) {
         try {
-          console.log('📁 开始完成会话并保存转录数据:', currentRecordingSessionId)
           await finalizeSession(currentRecordingSessionId)
-          console.log('✅ 会话完成，转录数据已保存')
-          toast.success('转录数据已保存到数据库')
+          toast.success('Transcription data saved to database')
           
-          // 等待一下，然后手动刷新音频文件
+          // Wait a moment, then manually refresh audio files
           setTimeout(async () => {
             if (refreshAudioRef.current) {
-              console.log('🔄 触发音频文件刷新')
               await refreshAudioRef.current()
             }
           }, 3000)
           
         } catch (error) {
-          console.error('❌ 完成会话失败:', error)
-          toast.error('保存转录数据失败，但实时数据仍可用')
+          toast.error('Failed to save transcription data, but real-time data is still available')
         }
       } else {
-        console.warn('⚠️ 录音结束但没有当前录音会话ID')
       }
       
-      // 刷新会话数据获取最新状态
+      // Refresh session data to get latest status
       setTimeout(() => {
         try {
           fetchSessions(true)
         } catch (e) {
-          console.log('延迟刷新会话失败(忽略):', e)
         }
       }, 1200)
       
       setTimeout(() => {
         setCurrentRecordingSessionId('')
-      }, 2000) // 给数据更新一些时间
+      }, 2000) // Give data update some time
     }
   }, [fetchSessions, finalizeSession, currentRecordingSessionId])
 
-  // 处理录音会话创建
+  // Handle recording session creation
   const handleSessionCreated = useCallback((roomName: string) => {
-    console.log('🎤 录音会话已创建:', roomName)
     
-    // 从room name中提取真正的session ID
+    // Extract real session ID from room name
     let actualSessionId = roomName
     if (roomName.startsWith('intrascribe_room_')) {
       actualSessionId = roomName.replace('intrascribe_room_', '')
     }
     
-    console.log('📋 提取的会话ID:', actualSessionId)
     setCurrentRecordingSessionId(actualSessionId)
-    // 自动选中新创建的会话
+    // Auto-select newly created session
     setSelectedSessionId(actualSessionId)
     
-    // 简化：依赖实时订阅的 INSERT/UPDATE 事件自动更新
+    // Simplified: rely on real-time subscription INSERT/UPDATE events for auto-update
   }, [])
 
   // Handle audio time updates for transcript highlighting
@@ -231,22 +226,21 @@ export default function HomePage() {
     }
   }, [])
 
-  // 提取会话数据处理逻辑为独立函数
+  // Extract session data processing logic as independent function
   const processSessionData = useCallback((selectedSession: RecordingSession) => {
     if (isRecording) {
-      toast.warning('录音进行中，无法切换会话')
+      toast.warning('Recording in progress, cannot switch session')
       return
     }
 
-    // 如果选择的是同一个会话，且AI总结面板正在显示，不要重新加载
+    // If selecting the same session and AI summary panel is showing, don't reload
     if (selectedSessionId === selectedSession.id && showAISummaryPanel) {
-      console.log('📖 同一会话且AI总结面板正在显示，跳过重新加载')
       return
     }
 
     setSelectedSessionId(selectedSession.id)
     
-    // 清空当前状态
+    // Clear current state
     setCurrentTranscript([])
     setFullTranscriptText('')
     setAiSummary('')
@@ -255,52 +249,36 @@ export default function HomePage() {
     setTranscriptionId('')
     setShowAISummaryPanel(false)
     
-    // 恢复转录内容
+    // Restore transcription content
     if (selectedSession.transcriptions && selectedSession.transcriptions.length > 0) {
       const transcription = selectedSession.transcriptions[0]
-      console.log('🔍 恢复转录内容调试信息:', {
-        transcriptionId: transcription.id,
-        hasContent: !!transcription.content,
-        contentLength: transcription.content?.length || 0,
-        contentPreview: transcription.content?.substring(0, 100) || '',
-        hasSegments: !!transcription.segments,
-        segmentsType: typeof transcription.segments,
-        segmentsLength: Array.isArray(transcription.segments) ? transcription.segments.length : 'not array',
-        segmentsPreview: Array.isArray(transcription.segments) ? transcription.segments.slice(0, 2) : transcription.segments
-      })
       
       setFullTranscriptText(transcription.content)
       setTranscriptionId(transcription.id)
       
-      // 优先使用segments字段来构建转录项
+      // Prioritize using segments field to build transcript items
       let segments = transcription.segments
       
-      // 处理可能的数据格式问题
+      // Handle possible data format issues
       if (segments && typeof segments === 'string') {
         try {
-          console.log('📄 解析字符串格式的segments:', segments.substring(0, 200))
           segments = JSON.parse(segments)
-          console.log('✅ segments解析成功:', Array.isArray(segments) ? segments.length : 'not array')
         } catch (error) {
-          console.error('❌ 解析 segments JSON 失败:', error)
           segments = []
         }
       }
       
       if (segments && Array.isArray(segments) && segments.length > 0) {
-        console.log(`📊 处理 ${segments.length} 个转录片段`)
         
-        // 验证每个 segment
-        const validSegments = segments.filter((segment: unknown, index: number) => {
+        // Validate each segment
+        const validSegments = segments.filter((segment: unknown, _index: number) => {
           const seg = segment as { text?: string; speaker?: string; start_time?: number; end_time?: number; index?: number }
           const isValid = seg && seg.text && typeof seg.text === 'string' && seg.text.trim()
           if (!isValid) {
-            console.log(`⚠️ 无效的segment[${index}]:`, segment)
           }
           return isValid
         })
         
-        console.log(`✅ 找到 ${validSegments.length} 个有效segments`)
         
         if (validSegments.length > 0) {
           const transcriptItems = validSegments.map((segment: unknown, index: number) => {
@@ -315,12 +293,9 @@ export default function HomePage() {
             }
           })
           
-          console.log(`✅ 构建了 ${transcriptItems.length} 个转录项`)
-          console.log('🔍 转录项预览:', transcriptItems.slice(0, 2))
           setCurrentTranscript(transcriptItems)
         } else {
-          console.log('⚠️ 所有segments都无效，尝试使用content文本分割')
-          // 回退到content分割
+          // Fallback to content splitting
           if (transcription.content && transcription.content.trim()) {
             const lines = transcription.content.split('\n').filter((line: string) => line.trim())
             const transcriptItems = lines.map((line: string, index: number) => ({
@@ -328,23 +303,14 @@ export default function HomePage() {
               timestamp: new Date(transcription.created_at).toLocaleTimeString('zh-CN', { hour12: false }),
               text: line.trim()
             }))
-            console.log(`📝 从content分割创建了 ${transcriptItems.length} 个转录项`)
             setCurrentTranscript(transcriptItems)
           } else {
-            console.log('❌ content也为空，无法创建转录项')
             setCurrentTranscript([])
           }
         }
       } else {
-        console.log('⚠️ 没有有效的 segments 数据，使用 content 文本分割')
-        console.log('🔍 content调试信息:', {
-          hasContent: !!transcription.content,
-          contentType: typeof transcription.content,
-          contentLength: transcription.content?.length || 0,
-          contentPreview: transcription.content?.substring(0, 100) || 'empty'
-        })
         
-        // 如果没有segments，回退到分割content文本
+        // If no segments, fallback to splitting content text
         if (transcription.content && transcription.content.trim()) {
           const lines = transcription.content.split('\n').filter((line: string) => line.trim())
           
@@ -354,15 +320,13 @@ export default function HomePage() {
             text: line.trim()
           }))
           
-          console.log(`📝 从content创建了 ${transcriptItems.length} 个转录项`)
           setCurrentTranscript(transcriptItems)
         } else {
-          console.log('❌ content为空或无效，设置空转录')
           setCurrentTranscript([])
         }
       }
       
-      // 恢复AI总结
+      // Restore AI summary
       if (selectedSession.ai_summaries && selectedSession.ai_summaries.length > 0) {
         const summary = selectedSession.ai_summaries[0]
         setAiSummary(summary.summary)
@@ -370,43 +334,28 @@ export default function HomePage() {
         setShowAISummaryPanel(true)
       }
       
-      // 设置标题
+      // Set title
       setAiTitle(selectedSession.title)
     }
   }, [isRecording, selectedSessionId, showAISummaryPanel])
 
-  // 处理会话选择
+  // Handle session selection
   const handleSessionSelect = useCallback(async (sessionId: string) => {
-    console.log('📖 切换到会话:', sessionId)
     
-    // 从会话数据中恢复状态
+    // Restore state from session data
     const selectedSession = sessions.find(s => s.id === sessionId)
     if (selectedSession) {
-      console.log('📖 切换到会话:', selectedSession.title)
       
-      // 添加更详细的会话数据调试信息
-      console.log('🔍 会话详细信息:', {
-        sessionId: selectedSession.id,
-        title: selectedSession.title,
-        status: selectedSession.status,
-        hasTranscriptions: !!selectedSession.transcriptions,
-        transcriptionsLength: selectedSession.transcriptions?.length || 0,
-        transcriptionsData: selectedSession.transcriptions || [],
-        rawSession: selectedSession
-      })
+      // Add more detailed session data debug info
       
-      // 🆕 关键修复：如果会话已完成但没有转录数据，强制刷新
+      // Key fix: if session is completed but has no transcription data, force refresh
       if (selectedSession.status === 'completed' && 
           (!selectedSession.transcriptions || selectedSession.transcriptions.length === 0)) {
-        console.log('🔄 会话已完成但无转录数据，强制刷新会话列表')
         await fetchSessions()
-        // 刷新后重新获取会话数据
+        // Re-fetch session data after refresh
         const refreshedSession = sessions.find(s => s.id === sessionId)
         if (refreshedSession) {
-          console.log('🔄 刷新后的会话数据:', {
-            transcriptionsCount: refreshedSession.transcriptions?.length || 0
-          })
-          // 使用刷新后的数据继续处理
+          // Continue processing with refreshed data
           processSessionData(refreshedSession)
         }
         return
@@ -429,21 +378,21 @@ export default function HomePage() {
     })
     
     if (!fullTranscriptText && currentTranscript.length === 0) {
-      toast.error('暂无转录内容，无法生成总结')
+      toast.error('No transcription content available, cannot generate summary')
       return
     }
 
     const transcriptText = fullTranscriptText || currentTranscript.map(t => t.text).join(' ')
     
     if (!transcriptText.trim()) {
-      toast.error('转录内容为空，无法生成总结')
+      toast.error('Transcription content is empty, cannot generate summary')
       return
     }
 
     // 确保有有效的会话ID
     const sessionId = selectedSessionId || currentRecordingSessionId
     if (!sessionId) {
-      toast.error('无法找到有效的录音会话，请先选择一个录音记录')
+      toast.error('Cannot find valid recording session, please select a recording first')
       return
     }
 
@@ -452,7 +401,7 @@ export default function HomePage() {
     if (!finalTemplateId) {
       const currentSession = sessions.find(s => s.id === sessionId)
       if (!currentSession) {
-        toast.error('未找到对应的录音会话，无法生成总结')
+        toast.error('Cannot find corresponding recording session, unable to generate summary')
         return
       }
       // 注意：RecordingSession中暂时没有模板ID字段，使用默认模板
@@ -485,11 +434,11 @@ export default function HomePage() {
           setAiTitle(titleResult.title)
         }
         
-        toast.success('AI总结和标题生成完成')
+        toast.success('AI summary and title generation completed')
       }
     } catch (error) {
       console.error('生成AI总结失败:', error)
-      toast.error('生成AI总结失败')
+      toast.error('Failed to generate AI summary')
     } finally {
       setIsLoadingSummary(false)
     }
@@ -1085,7 +1034,7 @@ export default function HomePage() {
       const result = await apiPost('api', `/v1/sessions/${sessionId}/rename-speaker`, {
         oldSpeaker,
         newSpeaker
-      })
+      }) as RenameSpeakerResponse
       
       if (result.success) {
         console.log('✅ 说话人重命名成功')
@@ -1122,7 +1071,7 @@ export default function HomePage() {
         }, 2000)
         
       } else {
-        throw new Error(result.error || '重命名说话人失败')
+        throw new Error(result.message || '重命名说话人失败')
       }
     } catch (error) {
       console.error('❌ 重命名说话人失败:', error)

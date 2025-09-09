@@ -7,7 +7,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { useAuth } from '@/hooks/useAuth'
-import { SocialLoginButtons } from './social-login-buttons'
 
 interface RegisterFormProps {
   onToggleMode: () => void
@@ -18,7 +17,7 @@ export function RegisterForm({ onToggleMode }: RegisterFormProps) {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [username, setUsername] = useState('')
-  const [fullName, setFullName] = useState('')
+  // const [fullName, _setFullName] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
@@ -38,28 +37,27 @@ export function RegisterForm({ onToggleMode }: RegisterFormProps) {
     setError(null)
     setSuccess(null)
     try {
-      await signUp(email, password, username, fullName || undefined)
-      setSuccess('账户创建成功！请检查您的邮箱以验证账户。')
+      await signUp(email, password, username, undefined)
+      setSuccess('Account created successfully! Please check your email to verify your account.')
     } catch (err: unknown) {
       const error = err as { message?: string }
-      console.error('注册错误详情:', err)
       
-      // 处理特定的错误类型
-      let errorMessage = '注册失败，请重试'
+      // Handle specific error types
+      let errorMessage = 'Registration failed, please try again'
       
       if (error.message) {
         if (error.message.includes('duplicate key value violates unique constraint "users_username_key"') ||
             error.message.includes('username') && error.message.includes('already exists')) {
-          errorMessage = `用户名 "${username}" 已被占用，请选择其他用户名`
+          errorMessage = `Username "${username}" is already taken, please choose another username`
         } else if (error.message.includes('duplicate key value violates unique constraint "users_email_key"') ||
                    error.message.includes('email') && error.message.includes('already exists')) {
-          errorMessage = `邮箱 "${email}" 已被注册，请使用其他邮箱或尝试登录`
+          errorMessage = `Email "${email}" is already registered, please use another email or try logging in`
         } else if (error.message.includes('User already registered')) {
-          errorMessage = '该邮箱已注册，请直接登录'
+          errorMessage = 'This email is already registered, please login directly'
         } else if (error.message.includes('Password should be at least 6 characters')) {
-          errorMessage = '密码长度至少需要6个字符'
+          errorMessage = 'Password must be at least 6 characters long'
         } else if (error.message.includes('Invalid email')) {
-          errorMessage = '邮箱格式不正确'
+          errorMessage = 'Email format is incorrect'
         } else {
           errorMessage = error.message
         }
@@ -73,7 +71,7 @@ export function RegisterForm({ onToggleMode }: RegisterFormProps) {
 
   return (
     <div className="space-y-6">
-      {/* 标题 */}
+      {/* Title */}
       <div className="text-center space-y-2">
         <h1 className="text-3xl font-bold tracking-tight">Create Account</h1>
         <p className="text-muted-foreground">
@@ -81,7 +79,7 @@ export function RegisterForm({ onToggleMode }: RegisterFormProps) {
         </p>
       </div>
 
-      {/* 错误和成功消息 */}
+      {/* Error and success messages */}
       {error && (
         <div className="p-3 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg">
           {error}
@@ -93,10 +91,10 @@ export function RegisterForm({ onToggleMode }: RegisterFormProps) {
         </div>
       )}
 
-      {/* 社交登录按钮 */}
-      <SocialLoginButtons />
+      {/* Social login buttons */}
+      {/* <SocialLoginButtons /> */}
 
-      {/* 分隔线 */}
+      {/* Divider */}
       <div className="relative">
         <Separator />
         <div className="absolute inset-0 flex items-center justify-center">
@@ -106,9 +104,9 @@ export function RegisterForm({ onToggleMode }: RegisterFormProps) {
         </div>
       </div>
 
-      {/* 注册表单 */}
+      {/* Registration form */}
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* 用户名输入 */}
+        {/* Username input */}
         <div className="space-y-2">
           <Label htmlFor="username">Username *</Label>
           <div className="relative">
@@ -126,8 +124,8 @@ export function RegisterForm({ onToggleMode }: RegisterFormProps) {
           </div>
         </div>
 
-        {/* 全名输入 */}
-        <div className="space-y-2">
+        {/* Full name input */}
+        {/* <div className="space-y-2">
           <Label htmlFor="fullName">Full Name (Optional)</Label>
           <div className="relative">
             <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
@@ -141,9 +139,9 @@ export function RegisterForm({ onToggleMode }: RegisterFormProps) {
               disabled={isLoading}
             />
           </div>
-        </div>
+        </div> */}
 
-        {/* 邮箱输入 */}
+        {/* Email input */}
         <div className="space-y-2">
           <Label htmlFor="register-email">Email *</Label>
           <div className="relative">
@@ -161,7 +159,7 @@ export function RegisterForm({ onToggleMode }: RegisterFormProps) {
           </div>
         </div>
 
-        {/* 密码输入 */}
+        {/* Password input */}
         <div className="space-y-2">
           <Label htmlFor="register-password">Password *</Label>
           <div className="relative">
@@ -196,7 +194,7 @@ export function RegisterForm({ onToggleMode }: RegisterFormProps) {
           )}
         </div>
 
-        {/* 确认密码输入 */}
+        {/* Confirm password input */}
         <div className="space-y-2">
           <Label htmlFor="confirm-password">Confirm Password *</Label>
           <div className="relative">
@@ -231,7 +229,7 @@ export function RegisterForm({ onToggleMode }: RegisterFormProps) {
           )}
         </div>
 
-        {/* 注册按钮 */}
+        {/* Register button */}
         <Button 
           type="submit" 
           className="w-full" 
@@ -248,7 +246,7 @@ export function RegisterForm({ onToggleMode }: RegisterFormProps) {
         </Button>
       </form>
 
-      {/* 登录链接 */}
+      {/* Login link */}
       <div className="text-center text-sm">
         <span className="text-muted-foreground">Already have an account? </span>
         <button

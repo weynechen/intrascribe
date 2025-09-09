@@ -2,7 +2,6 @@ import { createClient as supabaseCreateClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 
 export async function createClient() {
-  // 服务器端始终使用本地代理路径
   const supabaseUrl = 'http://localhost:3000/supabase'
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 

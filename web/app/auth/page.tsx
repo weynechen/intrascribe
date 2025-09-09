@@ -16,14 +16,14 @@ export default function AuthPage() {
   const router = useRouter()
   const { user, loading } = useAuth()
 
-  // 如果用户已登录，跳转到主页面
+  // If user is logged in, redirect to main page
   useEffect(() => {
     if (!loading && user) {
       router.push('/')
     }
   }, [user, loading, router])
 
-  // 如果正在加载或已登录，显示加载状态
+  // If loading or logged in, show loading state
   if (loading || user) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 flex items-center justify-center p-4">
@@ -31,7 +31,7 @@ export default function AuthPage() {
           <div className="mx-auto w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mb-4 animate-pulse">
             <Mic className="w-8 h-8 text-primary-foreground" />
           </div>
-          <p className="text-muted-foreground">正在跳转...</p>
+          <p className="text-muted-foreground">Redirecting...</p>
         </div>
       </div>
     )

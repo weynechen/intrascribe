@@ -11,7 +11,7 @@ export default function AuthCallback() {
   useEffect(() => {
     const handleAuthCallback = async () => {
       try {
-        // 处理 OAuth 回调
+        // Handle OAuth callback
         if (!supabase) {
           console.error('Supabase client not initialized')
           setTimeout(() => {
@@ -24,7 +24,7 @@ export default function AuthCallback() {
         
         if (error) {
           console.error('Auth callback error:', error)
-          // 延迟重定向以避免竞争条件
+          // Delayed redirect to avoid race conditions
           setTimeout(() => {
             router.replace('/auth?error=callback_error')
           }, 100)
@@ -32,12 +32,12 @@ export default function AuthCallback() {
         }
 
         if (data.session) {
-          // 登录成功，延迟重定向到主页面
+          // Login successful, delayed redirect to main page
           setTimeout(() => {
             router.replace('/')
           }, 100)
         } else {
-          // 没有会话，延迟重定向到登录页面
+          // No session, delayed redirect to login page
           setTimeout(() => {
             router.replace('/auth')
           }, 100)
@@ -50,7 +50,7 @@ export default function AuthCallback() {
       }
     }
 
-    // 延迟执行回调处理以确保组件完全挂载
+    // Delayed callback handling to ensure component is fully mounted
     const timeoutId = setTimeout(handleAuthCallback, 200)
     
     return () => clearTimeout(timeoutId)
@@ -60,7 +60,7 @@ export default function AuthCallback() {
     <div className="min-h-screen flex items-center justify-center bg-gray-100">
       <div className="text-center space-y-4">
         <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
-        <p className="text-muted-foreground">正在处理登录...</p>
+        <p className="text-muted-foreground">Processing login...</p>
       </div>
     </div>
   )

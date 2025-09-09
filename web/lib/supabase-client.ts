@@ -1,32 +1,26 @@
 /**
- * Supabase客户端 - 环境切换无感知版本
- * 使用统一的API客户端和环境配置
+ * Supabase client with environment-agnostic configuration
  */
 
 import { createClient } from '@supabase/supabase-js'
 import { httpClient } from './api-client'
 
-// 获取Supabase配置 - 环境切换无感知
+// Get Supabase configuration
 function getSupabaseConfig() {
   const config = httpClient.getConfig()
   const isClient = typeof window !== 'undefined'
   
-  // 从环境变量获取配置，支持不同环境
   let supabaseUrl: string
   let supabaseAnonKey: string
   
   if (isClient) {
-    // 客户端环境 - 使用NEXT_PUBLIC_前缀的变量
     if (config.environment === 'development') {
-      // 开发环境：使用代理路径
       supabaseUrl = `${window.location.origin}/supabase`
     } else {
-      // 生产环境：使用环境变量或回退到代理
       supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || `${window.location.origin}/supabase`
     }
     supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   } else {
-    // 服务端环境 - 直接访问Supabase
     if (config.environment === 'docker') {
       supabaseUrl = 'http://host.docker.internal:54321'
     } else if (config.environment === 'production') {
@@ -40,13 +34,6 @@ function getSupabaseConfig() {
   if (!supabaseAnonKey) {
     throw new Error('Missing Supabase anonymous key. Please set NEXT_PUBLIC_SUPABASE_ANON_KEY environment variable.')
   }
-
-  console.log('🔗 Supabase configuration:', {
-    url: supabaseUrl,
-    environment: config.environment,
-    isClient,
-    hasKey: !!supabaseAnonKey
-  })
 
   return { supabaseUrl, supabaseAnonKey }
 }
@@ -102,45 +89,31 @@ function createSupabaseClient(): ReturnType<typeof createClient> {
       }
     })
 
-    console.log('🔗 Supabase客户端已初始化')
     return supabaseInstance
   } finally {
     isCreating = false
   }
 }
 
-// 导出单例实例
+// Export singleton instance
 export const supabase = createSupabaseClient()
 
-// 确保在全局范围内只有一个实例
+// Ensure only one instance globally
 if (typeof window !== 'undefined') {
   const globalWindow = window as { __supabase?: typeof supabase }
   if (!globalWindow.__supabase) {
     globalWindow.__supabase = supabase
-  } else {
-    console.warn('检测到已存在的Supabase实例，使用现有实例')
   }
 }
 
-// 页面刷新和卸载清理
+// Page cleanup
 if (typeof window !== 'undefined') {
-  // 页面刷新前清理所有订阅
   window.addEventListener('beforeunload', () => {
-    console.log('🔄 页面即将刷新，清理所有订阅')
     subscriptionManager.cleanupAllChannels()
-  })
-  
-  // 页面隐藏时暂停订阅
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) {
-      console.log('📴 页面隐藏，暂停订阅活动')
-    } else {
-      console.log('👁️ 页面可见，恢复订阅活动')
-    }
   })
 }
 
-// 全局订阅管理器，防止重复订阅
+// Global subscription manager to prevent duplicate subscriptions
 interface RealtimePayload {
   eventType: string
   table: string
@@ -153,15 +126,11 @@ const subscriptionManager = {
   activeChannels: new Map<string, ReturnType<typeof supabase.channel>>(),
   
   createChannel(channelName: string, userId: string, callback: (payload: RealtimePayload) => void) {
-    // 检查是否已存在相同的订阅
     if (this.activeChannels.has(channelName)) {
-      console.warn(`频道 ${channelName} 已存在，返回现有订阅`)
       return this.activeChannels.get(channelName)
     }
 
     try {
-      console.log(`🔧 正在创建频道: ${channelName}, 用户ID: ${userId}`)
-      console.log(`🔧 订阅配置: schema=public, table=recording_sessions, filter=user_id=eq.${userId}`)
       
       const channel = supabase
         .channel(channelName)
@@ -171,26 +140,14 @@ const subscriptionManager = {
           table: 'recording_sessions',
           filter: `user_id=eq.${userId}`
         }, (payload: RealtimePayload) => {
-          // 防护措施：检查页面是否仍然可见
           if (typeof document !== 'undefined' && document.hidden) {
-            console.log(`⏸️ 页面隐藏中，跳过实时事件处理: ${channelName}`)
             return
           }
           
-          console.log(`🎯 频道 ${channelName} 收到实时事件:`, {
-            eventType: payload.eventType,
-            table: payload.table,
-            schema: payload.schema,
-            newId: payload.new?.id,
-            oldId: payload.old?.id,
-            newStatus: payload.new?.status,
-            timestamp: new Date().toISOString()
-          })
           
           try {
             callback(payload)
           } catch (error) {
-            console.error(`❌ 处理实时事件回调失败:`, error)
           }
         })
         .subscribe((status: string) => {

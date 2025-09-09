@@ -2,7 +2,7 @@
 const nextConfig = {
   reactStrictMode: true,
   output: 'standalone', // Enable Docker deployment
-  
+  devIndicators: false,
   // 环境配置 - 支持开发、生产和Docker环境的无感知切换
   async rewrites() {
     const isDev = process.env.NODE_ENV === 'development'

@@ -32,7 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const initializedRef = useRef(false)
 
-  // 邮箱密码登录
+  // Email password login
   const signIn = async (email: string, password: string) => {
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
@@ -43,10 +43,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw error
     }
     
-    // 不返回数据，保持与接口定义一致
+    // Don't return data, keep consistent with interface definition
   }
 
-  // 邮箱密码注册
+  // Email password registration
   const signUp = async (email: string, password: string, username?: string, fullName?: string) => {
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -63,10 +63,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw error
     }
     
-    // 不返回数据，保持与接口定义一致
+    // Don't return data, keep consistent with interface definition
   }
 
-  // 登出
+  // Logout
   const signOut = async () => {
     const { error } = await supabase.auth.signOut()
     
@@ -75,7 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  // 第三方登录
+  // Third-party login
   const signInWithProvider = async (provider: 'google' | 'github') => {
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider,
@@ -88,10 +88,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw error
     }
     
-    // 不返回数据，保持与接口定义一致
+    // Don't return data, keep consistent with interface definition
   }
 
-  // 重置密码
+  // Reset password
   const resetPassword = async (email: string) => {
     const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/auth/reset-password`
@@ -101,7 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
-    // 使用 ref 确保只初始化一次
+    // Use ref to ensure initialization only once
     if (initializedRef.current) {
       return
     }
@@ -110,7 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let mounted = true
     let subscription: any = null
 
-    // 获取初始会话
+    // Get initial session
     const initAuth = async () => {
       try {
         const { data: { session: initialSession }, error } = await supabase.auth.getSession()
@@ -132,7 +132,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // 监听认证状态变化
+    // Listen to auth state changes
     try {
       const { data } = supabase.auth.onAuthStateChange(
         (event: AuthChangeEvent, currentSession: Session | null) => {
@@ -161,7 +161,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.error('Failed to unsubscribe from auth state changes:', error)
       }
     }
-  }, []) // 空依赖数组，只运行一次
+  }, []) // Empty dependency array, run only once
 
   return (
     <AuthContext.Provider value={{ 

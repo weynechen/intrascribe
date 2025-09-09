@@ -18,7 +18,7 @@ export function SocialLoginButtons() {
     try {
       await signInWithProvider('google')
     } catch {
-      setError('Google登录失败，请重试')
+      setError('Google login failed, please try again')
     } finally {
       setGoogleLoading(false)
     }
@@ -30,7 +30,7 @@ export function SocialLoginButtons() {
     try {
       await signInWithProvider('github')
     } catch {
-      setError('Github登录失败，请重试')
+      setError('Github login failed, please try again')
     } finally {
       setGithubLoading(false)
     }
@@ -38,7 +38,7 @@ export function SocialLoginButtons() {
 
   return (
     <div className="space-y-3">
-      {/* 错误消息 */}
+      {/* Error message */}
       {error && (
         <div className="p-3 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg">
           {error}
@@ -46,7 +46,7 @@ export function SocialLoginButtons() {
       )}
       
       <div className="grid grid-cols-2 gap-3">
-        {/* Google 登录按钮 */}
+        {/* Google login button */}
         <Button
           variant="outline"
           onClick={handleGoogleSignIn}
@@ -61,7 +61,7 @@ export function SocialLoginButtons() {
           Google
         </Button>
 
-        {/* Github 登录按钮 */}
+        {/* Github login button */}
         <Button
           variant="outline"
           onClick={handleGithubSignIn}
@@ -80,7 +80,7 @@ export function SocialLoginButtons() {
   )
 }
 
-// Google 图标组件
+// Google icon component
 function GoogleIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24">
@@ -104,7 +104,7 @@ function GoogleIcon({ className }: { className?: string }) {
   )
 }
 
-// Github 图标组件
+// Github icon component
 function GithubIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="currentColor">

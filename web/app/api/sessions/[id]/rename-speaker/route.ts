@@ -11,36 +11,34 @@ export async function POST(
     const body = await request.json()
     const { oldSpeaker, newSpeaker } = body
 
-    console.log('📥 收到说话人重命名请求:', { sessionId, oldSpeaker, newSpeaker })
 
-    // 验证参数
+    // Validate parameters
     if (!oldSpeaker || !newSpeaker) {
       return NextResponse.json(
-        { error: '缺少必要参数: oldSpeaker 和 newSpeaker' },
+        { error: 'Missing required parameters: oldSpeaker and newSpeaker' },
         { status: 400 }
       )
     }
 
     if (oldSpeaker === newSpeaker) {
       return NextResponse.json(
-        { error: '新旧说话人名称相同' },
+        { error: 'New and old speaker names are the same' },
         { status: 400 }
       )
     }
 
-    // 获取认证头
+    // Get authorization header
     const authorization = request.headers.get('authorization')
     if (!authorization || !authorization.startsWith('Bearer ')) {
       return NextResponse.json(
-        { error: '缺少认证令牌' },
+        { error: 'Missing authentication token' },
         { status: 401 }
       )
     }
 
-    // 使用统一API客户端转发请求到后端API
+    // Use unified API client to forward request to backend API
     const token = authorization.replace('Bearer ', '')
     httpClient.setAuthTokenGetter(() => token)
-    console.log('🔄 调用后端API:', `/v1/sessions/${sessionId}/rename-speaker`)
     
     const result = await httpClient.apiServer(`/v1/sessions/${sessionId}/rename-speaker`, {
       method: 'POST',
@@ -49,14 +47,13 @@ export async function POST(
         newSpeaker
       })
     })
-    console.log('✅ 说话人重命名成功')
 
     return NextResponse.json(result)
 
   } catch (error) {
     console.error('❌ API Error:', error)
     return NextResponse.json(
-      { error: `服务器内部错误: ${error instanceof Error ? error.message : '未知错误'}` },
+      { error: `Internal server error: ${error instanceof Error ? error.message : 'Unknown error'}` },
       { status: 500 }
     )
   }

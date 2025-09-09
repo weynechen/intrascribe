@@ -11,16 +11,13 @@ export function useRecordingSessions() {
   const { user, session } = useAuth()
   const [sessions, setSessions] = useState<RecordingSessionWithRelations[]>([])
   const [loading, setLoading] = useState(true)
-  // 使用统一的API服务客户端（无需state管理）
   const channelNameRef = useRef<string>('')
   const transcriptionChannelNameRef = useRef<string>('')
   const fetchingRef = useRef(false)
   const lastUserIdRef = useRef<string>('')
   const initializedRef = useRef(false)
 
-  // API客户端已统一管理，无需单独初始化
-
-  // 获取用户的录音会话 - 使用稳定的函数
+  // Get user's recording sessions
   const fetchSessions = useCallback(async (userId: string, force: boolean = false) => {
     if (!userId || (fetchingRef.current && !force)) return
 
@@ -63,11 +60,10 @@ export function useRecordingSessions() {
 
       if (error) throw error
       
-      console.log('📊 获取到录音会话数据:', data?.length || 0, '条记录')
       
-      // 手动验证和转换数据类型
+      // Manual validation and data type conversion
       const validatedSessions: RecordingSessionWithRelations[] = (data || []).map((item: any) => ({
-        // 基础会话字段
+        // Basic session fields
         id: String(item.id),
         user_id: String(item.user_id),
         title: String(item.title),
@@ -84,7 +80,7 @@ export function useRecordingSessions() {
         created_at: String(item.created_at),
         updated_at: String(item.updated_at),
         
-        // 关联数据 - 处理可能的查询错误
+        // Related data - handle possible query errors
         audio_files: Array.isArray(item.audio_files) ? item.audio_files : [],
         transcriptions: Array.isArray(item.transcriptions) ? item.transcriptions : [],
         ai_summaries: Array.isArray(item.ai_summaries) ? item.ai_summaries : []
@@ -92,29 +88,18 @@ export function useRecordingSessions() {
       
       setSessions(validatedSessions)
     } catch (error) {
-      console.error('获取录音会话失败:', error)
-      toast.error('获取录音会话失败')
+      toast.error('Failed to fetch recording sessions')
     } finally {
       setLoading(false)
       fetchingRef.current = false
     }
   }, [])
 
-  // 处理转录实时更新 - 使用useRef保持稳定引用
+  // Handle transcription real-time updates
   const handleTranscriptionChangeRef = useRef((payload: any) => {
-    console.log('📡 转录数据实时变化:', {
-      eventType: payload.eventType,
-      table: payload.table,
-      sessionId: payload.new?.session_id || payload.old?.session_id,
-      transcriptionId: payload.new?.id || payload.old?.id,
-      timestamp: new Date().toISOString()
-    })
     
-    // 转录数据更新时，刷新相关会话数据
     if (payload.eventType === 'UPDATE' && payload.new?.session_id) {
-      console.log('🔄 转录数据更新，刷新会话数据以获取最新转录内容')
-      
-      // 延迟刷新，确保数据库操作完成
+      // Delayed refresh to ensure database operations are complete
       setTimeout(() => {
         if (lastUserIdRef.current) {
           fetchSessions(lastUserIdRef.current)
@@ -336,11 +321,10 @@ export function useRecordingSessions() {
 
         if (error) throw error
         
-        console.log('📊 获取到录音会话数据:', data?.length || 0, '条记录')
         
-        // 手动验证和转换数据类型（loadSessions版本）
+        // Manual validation and data type conversion（loadSessions版本）
         const validatedSessions: RecordingSessionWithRelations[] = (data || []).map((item: any) => ({
-          // 基础会话字段
+          // Basic session fields
           id: String(item.id),
           user_id: String(item.user_id),
           title: String(item.title),
@@ -357,7 +341,7 @@ export function useRecordingSessions() {
           created_at: String(item.created_at),
           updated_at: String(item.updated_at),
           
-          // 关联数据 - 处理可能的查询错误
+          // Related data - handle possible query errors
           audio_files: Array.isArray(item.audio_files) ? item.audio_files : [],
           transcriptions: Array.isArray(item.transcriptions) ? item.transcriptions : [],
           ai_summaries: Array.isArray(item.ai_summaries) ? item.ai_summaries : []
@@ -365,8 +349,7 @@ export function useRecordingSessions() {
         
         setSessions(validatedSessions)
       } catch (error) {
-        console.error('获取录音会话失败:', error)
-        toast.error('获取录音会话失败')
+        toast.error('Failed to fetch recording sessions')
       } finally {
         setLoading(false)
         fetchingRef.current = false

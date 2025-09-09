@@ -8,6 +8,24 @@ import { useAuth } from '@/hooks/useAuth'
 import { apiGet, httpClient } from '@/lib/api-client'
 import { toast } from 'sonner'
 
+interface BatchTranscriptionStatistics {
+  speaker_count: number
+  total_segments: number
+  total_duration_seconds: number
+  transcription_length: number
+}
+
+interface BatchTranscriptionResponse {
+  status: string
+  statistics?: BatchTranscriptionStatistics
+}
+
+interface AudioFile {
+  public_url: string
+  id?: string
+  name?: string
+}
+
 interface HeaderProps {
   isRecording: boolean
   onAISummary?: () => void
@@ -36,57 +54,43 @@ export function Header({
   const [isUploading, setIsUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   
-  // 使用useAuth获取认证状态
   const { session } = useAuth()
-  
-  // 使用useRef来跟踪前一个录音状态
   const wasRecordingRef = useRef(isRecording)
 
-  // 检查会话是否有音频文件
+  // Check if session has audio files
   const checkSessionAudio = useCallback(async (sessionId: string) => {
     try {
-      // 如果sessionId为空，直接返回
       if (!sessionId) {
-        console.log('⚠️ sessionId为空，跳过音频文件检查')
         return
       }
-      
-      console.log('🔍 检查会话音频文件:', sessionId)
 
-      // 使用统一的API客户端获取音频文件
-      // 设置认证token获取器
+      // Use unified API client to get audio files
       httpClient.setAuthTokenGetter(() => session?.access_token || null)
       
-      const data = await apiGet('api', `/v1/sessions/${sessionId}/audio_files`)
-      console.log('📊 Audio files数据:', data)
+      const data = await apiGet('api', `/v1/sessions/${sessionId}/audio_files`) as AudioFile[]
         
       if (data && data.length > 0) {
-        const audioFile = data[0] // 取第一个音频文件
-        console.log('📁 找到音频文件:', audioFile)
-        
-        // 将原始URL转换为通过代理访问的URL
+        const audioFile = data[0] // Take first audio file
+        // Convert original URL to proxy-accessed URL
         const originalUrl = audioFile.public_url
         let proxyUrl = originalUrl
         
-        // 如果是HTTP地址，转换为代理路径
-        //TODO：历史遗留，后续可去掉
+        // If HTTP address, convert to proxy path
+        //TODO: Legacy code, can be removed later
         if (originalUrl && originalUrl.startsWith('http://localhost:54321/')) {
           proxyUrl = originalUrl.replace('http://localhost:54321/', '/')
         } else if (originalUrl && originalUrl.includes('localhost:54321')) {
-          // 处理其他可能的格式
+          // Handle other possible formats
           proxyUrl = originalUrl.replace(/https?:\/\/[^/]*localhost:54321\//, '/')
         }
         
         setAudioUrl(proxyUrl)
         setHasAudio(true)
-        console.log('✅ 音频URL已设置:', proxyUrl, '(原始URL:', originalUrl, ')')
       } else {
-        console.log('📭 该会话暂无音频文件')
         setHasAudio(false)
         setAudioUrl(undefined)
       }
     } catch (error) {
-      console.error('❌ 获取音频文件失败:', error)
       setHasAudio(false)
       setAudioUrl(undefined)
     }
@@ -95,7 +99,7 @@ export function Header({
   // Handle audio file import
   const handleAudioImport = () => {
     if (isRecording) {
-      toast.warning('录音进行中，无法导入音频文件')
+      toast.warning('Recording in progress, cannot import audio files')
       return
     }
     
@@ -110,7 +114,6 @@ export function Header({
     if (!files || files.length === 0) return
 
     const selectedFiles = Array.from(files)
-    console.log('📁 选择的文件:', selectedFiles.map(f => ({ name: f.name, size: f.size, type: f.type })))
 
     // Check file formats
     const validFiles = selectedFiles.filter(file => {
@@ -120,21 +123,19 @@ export function Header({
       const isValidFormat = isWav || isMp3
       
       if (!isValidFormat) {
-        console.log('❌ 文件格式检查失败:', { name: file.name, type: file.type, fileName })
-        toast.error(`文件 ${file.name} 格式不支持，仅支持 WAV 和 MP3 格式`)
+        toast.error(`File ${file.name} format not supported, only WAV and MP3 formats are supported`)
       } else {
-        console.log('✅ 文件格式检查通过:', { name: file.name, type: file.type })
       }
       return isValidFormat
     })
 
     if (validFiles.length === 0) {
-      toast.error('没有有效的音频文件')
+      toast.error('No valid audio files')
       return
     }
 
     if (validFiles.length > 1) {
-      toast.error('暂时只支持单个文件导入')
+      toast.error('Currently only supports single file import')
       return
     }
 
@@ -148,7 +149,7 @@ export function Header({
   // Process batch transcription
   const processBatchTranscription = async (file: File) => {
     if (!apiClient) {
-      toast.error('API客户端未初始化')
+      toast.error('API client not initialized')
       return
     }
 
@@ -161,17 +162,17 @@ export function Header({
       
       let formatInfo = ''
       if (isMP3) {
-        formatInfo = ' (将转换为WAV处理，存储为MP3)'
+        formatInfo = ' (will be converted to WAV for processing, stored as MP3)'
       } else if (isWAV) {
-        formatInfo = ' (将转换为WAV处理，存储为MP3)'
+        formatInfo = ' (will be converted to WAV for processing, stored as MP3)'
       }
       
-      toast.info(`开始处理音频文件: ${file.name}${formatInfo}`)
+      toast.info(`Starting to process audio file: ${file.name}${formatInfo}`)
       
       // Call backend batch transcription API using APIClient pattern
       const token = session?.access_token
       if (!token) {
-        toast.error('用户未认证')
+        toast.error('User not authenticated')
         return
       }
       
@@ -180,41 +181,34 @@ export function Header({
       formData.append('audio_file', file)
       
       // Debug: log file details before sending
-      console.log('🔍 发送的文件详情:', {
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        lastModified: file.lastModified
-      })
       
-      // 使用统一的API客户端进行文件上传
-      // 设置认证token
+      // Use unified API client for file upload
+      // Set authentication token
       httpClient.setAuthTokenGetter(() => token)
       
-      // API客户端会自动检测FormData并正确设置headers
+      // API client will auto-detect FormData and set headers correctly
       const result = await httpClient.apiServer('/v1/transcriptions/batch', {
         method: 'POST',
         body: formData
-      })
-      console.log('✅ 批量转录完成:', result)
+      }) as BatchTranscriptionResponse
       
               // Display detailed success message with statistics
         if (result.status === 'completed' && result.statistics) {
           const stats = result.statistics
           toast.success(
-            `🎉 音频文件转录完成！\n` +
-            `📁 文件: ${file.name}\n` +
-            `🗣️ 说话人数: ${stats.speaker_count}\n` +
-            `📊 转录片段: ${stats.total_segments}个\n` +
-            `⏱️ 总时长: ${Math.round(stats.total_duration_seconds)}秒\n` +
-            `📝 转录字数: ${stats.transcription_length}字\n` +
-            `💾 存储格式: MP3`,
+            `🎉 Audio file transcription completed!\n` +
+            `📁 File: ${file.name}\n` +
+            `🗣️ Speakers: ${stats.speaker_count}\n` +
+            `📊 Segments: ${stats.total_segments}\n` +
+            `⏱️ Duration: ${Math.round(stats.total_duration_seconds)} seconds\n` +
+            `📝 Transcription length: ${stats.transcription_length} characters\n` +
+            `💾 Storage format: MP3`,
             { duration: 8000 }
           )
       } else if (result.status === 'placeholder') {
-        toast.success('音频文件已接收，批量转录功能正在开发中')
+        toast.success('Audio file received, batch transcription feature is under development')
       } else {
-        toast.success('音频文件转录完成')
+        toast.success('Audio file transcription completed')
       }
       
       // Refresh file list and session data
@@ -223,48 +217,43 @@ export function Header({
       }
       
     } catch (error) {
-      console.error('❌ 批量转录失败:', error)
-      toast.error(`处理音频文件失败: ${error instanceof Error ? error.message : '未知错误'}`)
+      toast.error(`Failed to process audio file: ${error instanceof Error ? error.message : 'Unknown error'}`)
     } finally {
       setIsUploading(false)
     }
   }
 
-  // 当sessionId变化时检查音频文件
+  // Check audio files when sessionId changes
   useEffect(() => {
     if (sessionId) {
       checkSessionAudio(sessionId)
     } else {
-      // 当sessionId为空时，清理音频状态
+      // When sessionId is empty, clear audio state
       setHasAudio(false)
       setAudioUrl(undefined)
-      console.log('🧹 清理音频状态：sessionId为空')
     }
   }, [sessionId, checkSessionAudio])
 
-  // 当录音结束时重新检查音频文件
+  // Re-check audio files when recording ends
   useEffect(() => {
     if (wasRecordingRef.current && !isRecording && sessionId) {
-      // 录音刚结束，等待一下后重新检查音频文件
-      console.log('🔄 录音结束，将在5秒后重新检查音频文件:', sessionId)
+      // Recording just ended, wait a moment before re-checking audio files
       setTimeout(() => {
-        console.log('🔍 开始重新检查音频文件:', sessionId)
         checkSessionAudio(sessionId)
-      }, 5000) // 等待5秒确保finalize session完成
+      }, 5000) // Wait 5 seconds to ensure finalize session completion
     }
     
     wasRecordingRef.current = isRecording
   }, [isRecording, sessionId, checkSessionAudio])
 
-  // 暴露刷新音频文件的方法
+  // Expose method to refresh audio files
   const refreshAudioFiles = useCallback(async () => {
     if (sessionId) {
-      console.log('🔄 手动刷新音频文件:', sessionId)
       await checkSessionAudio(sessionId)
     }
   }, [sessionId, checkSessionAudio])
   
-  // 当父组件请求刷新音频时
+  // When parent component requests audio refresh
   useEffect(() => {
     if (onRefreshAudio) {
       onRefreshAudio.current = refreshAudioFiles
@@ -286,10 +275,10 @@ export function Header({
         ) : (
           <div className="flex-1 flex items-center justify-center">
             {!hasAudio && !isRecording && sessionId && (
-              <span className="text-sm text-gray-400">暂无音频文件</span>
+              <span className="text-sm text-gray-400">No audio files</span>
             )}
             {isRecording && (
-              <span className="text-sm text-red-600">录音中...</span>
+              <span className="text-sm text-red-600">Recording...</span>
             )}
           </div>
         )}

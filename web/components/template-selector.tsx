@@ -27,25 +27,18 @@ export function TemplateSelector({
   const [templates, setTemplates] = useState<SummaryTemplate[]>([])
   const [loading, setLoading] = useState(true)
   // const [previewTemplate, setPreviewTemplate] = useState<SummaryTemplate | null>(null)
-  // 使用统一的API服务客户端（无需state管理）
-
-  // API客户端已统一管理，无需单独初始化
-
-  // 加载模板
+  // Load templates
   const loadTemplates = useCallback(async () => {
     if (!session?.access_token) {
-      console.warn('⚠️ 用户未认证，跳过模板加载')
       return
     }
 
     try {
       setLoading(true)
-      console.log('🔄 开始加载模板...')
-      // 设置认证token
       apiServerClient.setAuthToken(session?.access_token || null)
       const templatesData = await apiServerClient.getTemplates()
       
-      // 过滤掉默认模板，只显示用户自定义模板
+      // Filter out default templates, only show user custom templates
       const userTemplates = templatesData.filter(template => !template.is_default)
       setTemplates(userTemplates)
       

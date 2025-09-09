@@ -7,10 +7,10 @@ import {
   getTaskStatus
 } from './api-types'
 
-// 始终使用Next.js代理，无论HTTP还是HTTPS都能正常工作
+// Always use Next.js proxy, works with both HTTP and HTTPS
 const supabaseUrl = typeof window !== 'undefined' 
-  ? `${window.location.origin}/supabase`  // 浏览器环境：使用当前域名 + 代理路径
-  : 'http://localhost:3000/supabase'      // 服务器环境：使用本地地址 + 代理路径
+  ? `${window.location.origin}/supabase`  // Browser environment: use current domain + proxy path
+  : 'http://localhost:3000/supabase'      // Server environment: use local address + proxy path
 
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
@@ -18,19 +18,19 @@ if (!supabaseAnonKey) {
   throw new Error('Missing NEXT_PUBLIC_SUPABASE_ANON_KEY environment variable')
 }
 
-// 全局单例模式：确保只创建一个Supabase客户端实例
+// Global singleton pattern: ensure only one Supabase client instance is created
 let supabaseInstance: ReturnType<typeof createClient> | null = null
 let isCreating = false
 
 function createSupabaseClient(): ReturnType<typeof createClient> {
-  // 如果实例已存在，直接返回
+  // If instance already exists, return directly
   if (supabaseInstance) {
     return supabaseInstance
   }
 
-  // 防止并发创建多个实例 - 简化处理
+  // Prevent concurrent creation of multiple instances - simplified handling
   if (isCreating) {
-    // 如果正在创建，直接创建一个新的客户端实例
+    // If currently creating, directly create a new client instance
     return createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
         autoRefreshToken: true,
@@ -67,45 +67,40 @@ function createSupabaseClient(): ReturnType<typeof createClient> {
       }
     })
 
-    console.log('🔗 Supabase客户端已初始化')
     return supabaseInstance
   } finally {
     isCreating = false
   }
 }
 
-// 导出单例实例
+// Export singleton instance
 export const supabase = createSupabaseClient()
 
-// 确保在全局范围内只有一个实例
+// Ensure only one instance globally
 if (typeof window !== 'undefined') {
   const globalWindow = window as { __supabase?: typeof supabase }
   if (!globalWindow.__supabase) {
     globalWindow.__supabase = supabase
   } else {
-    console.warn('检测到已存在的Supabase实例，使用现有实例')
   }
 }
 
-// 页面刷新和卸载清理
+// Page refresh and unload cleanup
 if (typeof window !== 'undefined') {
-  // 页面刷新前清理所有订阅
+  // Clean up all subscriptions before page refresh
   window.addEventListener('beforeunload', () => {
-    console.log('🔄 页面即将刷新，清理所有订阅')
     subscriptionManager.cleanupAllChannels()
   })
   
-  // 页面隐藏时暂停订阅
+  // Pause subscriptions when page is hidden
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
-      console.log('📴 页面隐藏，暂停订阅活动')
     } else {
-      console.log('👁️ 页面可见，恢复订阅活动')
     }
   })
 }
 
-// 全局订阅管理器，防止重复订阅
+// Global subscription manager to prevent duplicate subscriptions
 interface RealtimePayload {
   eventType: string
   table: string
@@ -118,15 +113,12 @@ const subscriptionManager = {
   activeChannels: new Map<string, ReturnType<typeof supabase.channel>>(),
   
   createChannel(channelName: string, userId: string, callback: (payload: RealtimePayload) => void) {
-    // 检查是否已存在相同的订阅
+    // Check if the same subscription already exists
     if (this.activeChannels.has(channelName)) {
-      console.warn(`频道 ${channelName} 已存在，返回现有订阅`)
       return this.activeChannels.get(channelName)
     }
 
     try {
-      console.log(`🔧 正在创建频道: ${channelName}, 用户ID: ${userId}`)
-      console.log(`🔧 订阅配置: schema=public, table=recording_sessions, filter=user_id=eq.${userId}`)
       
       const channel = supabase
         .channel(channelName)
@@ -136,66 +128,46 @@ const subscriptionManager = {
           table: 'recording_sessions',
           filter: `user_id=eq.${userId}`
         }, (payload: RealtimePayload) => {
-          // 防护措施：检查页面是否仍然可见
+          // Safety measure: check if page is still visible
           if (typeof document !== 'undefined' && document.hidden) {
-            console.log(`⏸️ 页面隐藏中，跳过实时事件处理: ${channelName}`)
             return
           }
           
-          console.log(`🎯 频道 ${channelName} 收到实时事件:`, {
-            eventType: payload.eventType,
-            table: payload.table,
-            schema: payload.schema,
-            newId: payload.new?.id,
-            oldId: payload.old?.id,
-            newStatus: payload.new?.status,
-            timestamp: new Date().toISOString()
-          })
           
           try {
             callback(payload)
           } catch (error) {
-            console.error(`❌ 处理实时事件回调失败:`, error)
           }
         })
         .subscribe((status: string) => {
-          console.log(`📡 频道 ${channelName} 订阅状态变化:`, status)
           if (status === 'SUBSCRIBED') {
-            console.log(`✅ 频道 ${channelName} 订阅成功`)
           } else if (status === 'CHANNEL_ERROR') {
-            console.error(`❌ 频道 ${channelName} 订阅失败`)
-            // 订阅失败时自动清理
+            // Auto cleanup on subscription failure
             this.removeChannel(channelName)
           } else if (status === 'TIMED_OUT') {
-            console.error(`⏰ 频道 ${channelName} 订阅超时`)
-            // 超时时自动清理并重试
+            // Auto cleanup and retry on timeout
             this.removeChannel(channelName)
           } else if (status === 'CLOSED') {
-            console.log(`🔒 频道 ${channelName} 订阅已关闭`)
-            // 确保从映射中移除
+            // Ensure removal from mapping
             this.activeChannels.delete(channelName)
           }
         })
 
       this.activeChannels.set(channelName, channel)
-      console.log(`✅ 创建新频道: ${channelName}`)
       return channel
     } catch (error) {
-      console.error(`创建频道失败: ${channelName}`, error)
       return null
     }
   },
 
-  // 创建转录表订阅频道
+  // Create transcription table subscription channel
   createTranscriptionChannel(channelName: string, sessionIds: string[], callback: (payload: RealtimePayload) => void) {
-    // 检查是否已存在相同的订阅
+    // Check if the same subscription already exists
     if (this.activeChannels.has(channelName)) {
-      console.warn(`转录频道 ${channelName} 已存在，返回现有订阅`)
       return this.activeChannels.get(channelName)
     }
 
     try {
-      console.log(`🔧 正在创建转录频道: ${channelName}, 监听会话IDs: ${sessionIds.slice(0, 3)}...`)
       
       const channel = supabase
         .channel(channelName)
@@ -204,56 +176,36 @@ const subscriptionManager = {
           schema: 'public',
           table: 'transcriptions'
         }, (payload: RealtimePayload) => {
-          // 防护措施：检查页面是否仍然可见
+          // Safety measure: check if page is still visible
           if (typeof document !== 'undefined' && document.hidden) {
-            console.log(`⏸️ 页面隐藏中，跳过转录实时事件处理: ${channelName}`)
             return
           }
 
-          // 检查是否是我们关心的会话的转录更新
+          // Check if it's a transcription update for sessions we care about
           const sessionId = payload.new?.session_id || payload.old?.session_id
           if (sessionId && typeof sessionId === 'string' && sessionIds.includes(sessionId)) {
-            console.log(`🎯 转录频道 ${channelName} 收到相关实时事件:`, {
-              eventType: payload.eventType,
-              table: payload.table,
-              sessionId: sessionId,
-              transcriptionId: payload.new?.id || payload.old?.id,
-              timestamp: new Date().toISOString()
-            })
             
             try {
               callback(payload)
             } catch (error) {
-              console.error(`❌ 处理转录实时事件回调失败:`, error)
             }
           } else {
-            console.log(`🔍 转录事件不匹配当前会话，跳过处理`, {
-              eventSessionId: sessionId,
-              targetSessionIds: sessionIds.slice(0, 3)
-            })
           }
         })
         .subscribe((status: string) => {
-          console.log(`📡 转录频道 ${channelName} 订阅状态变化:`, status)
           if (status === 'SUBSCRIBED') {
-            console.log(`✅ 转录频道 ${channelName} 订阅成功`)
           } else if (status === 'CHANNEL_ERROR') {
-            console.error(`❌ 转录频道 ${channelName} 订阅失败`)
             this.removeChannel(channelName)
           } else if (status === 'TIMED_OUT') {
-            console.error(`⏰ 转录频道 ${channelName} 订阅超时`)
             this.removeChannel(channelName)
           } else if (status === 'CLOSED') {
-            console.log(`🔒 转录频道 ${channelName} 订阅已关闭`)
             this.activeChannels.delete(channelName)
           }
         })
 
       this.activeChannels.set(channelName, channel)
-      console.log(`✅ 创建新转录频道: ${channelName}`)
       return channel
     } catch (error) {
-      console.error(`创建转录频道失败: ${channelName}`, error)
       return null
     }
   },
@@ -262,32 +214,26 @@ const subscriptionManager = {
     const channel = this.activeChannels.get(channelName)
     if (channel) {
       try {
-        console.log(`🔄 正在移除频道: ${channelName}`)
         channel.unsubscribe()
         this.activeChannels.delete(channelName)
-        console.log(`🗑️ 移除频道成功: ${channelName}`)
       } catch (error) {
-        console.error(`移除频道失败: ${channelName}`, error)
-        // 即使unsubscribe失败，也要从映射中移除
+        // Remove from mapping even if unsubscribe fails
         this.activeChannels.delete(channelName)
       }
     } else {
-      console.log(`⚠️ 频道不存在，无需移除: ${channelName}`)
     }
   },
 
-  // 清理所有频道
+  // Clean up all channels
   cleanupAllChannels() {
     const channelNames = Array.from(this.activeChannels.keys())
-    console.log(`🧹 清理所有频道，共 ${channelNames.length} 个`)
     
     channelNames.forEach(channelName => {
       this.removeChannel(channelName)
     })
     
-    // 强制清空映射
+    // Force clear mapping
     this.activeChannels.clear()
-    console.log('✅ 所有频道清理完成')
   },
 
   getActiveChannels() {

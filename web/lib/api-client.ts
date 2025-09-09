@@ -1,6 +1,5 @@
 /**
- * 统一的API请求客户端
- * 支持Supabase和API Server两个后端，实现环境切换无感知
+ * Unified API client for Supabase and API Server
  */
 
 // Environment configuration interface
@@ -37,7 +36,7 @@ class ApiError extends Error {
 }
 
 /**
- * 获取API配置 - 环境切换无感知
+ * Get API configuration
  */
 function getApiConfig(): ApiConfig {
   const isClient = typeof window !== 'undefined'
@@ -88,7 +87,7 @@ function getApiConfig(): ApiConfig {
 }
 
 /**
- * 统一的HTTP请求客户端
+ * Unified HTTP client
  */
 class HttpClient {
   private config: ApiConfig
@@ -96,12 +95,6 @@ class HttpClient {
 
   constructor() {
     this.config = getApiConfig()
-    console.log('🔧 API Client initialized with config:', {
-      environment: this.config.environment,
-      supabaseUrl: this.config.supabaseUrl,
-      apiServerUrl: this.config.apiServerUrl,
-      isClient: typeof window !== 'undefined'
-    })
   }
 
   /**
@@ -154,22 +147,8 @@ class HttpClient {
     config.signal = controller.signal
 
     try {
-      console.log('🌐 API Request:', {
-        url,
-        method: config.method || 'GET',
-        hasAuth: !!headers.Authorization,
-        environment: this.config.environment
-      })
-
       const response = await fetch(url, config)
       clearTimeout(timeoutId)
-
-      console.log('📡 API Response:', {
-        url,
-        status: response.status,
-        statusText: response.statusText,
-        ok: response.ok
-      })
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => 'Unknown error')
@@ -296,7 +275,6 @@ class HttpClient {
    */
   updateConfig(newConfig: Partial<ApiConfig>) {
     this.config = { ...this.config, ...newConfig }
-    console.log('🔄 API Client config updated:', this.config)
   }
 }
 
