@@ -1,0 +1,119 @@
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Virtual environments (including in subdirectories)
+venv/
+env/
+ENV/
+.venv/
+*/.venv/
+*/venv/
+*/env/
+**/venv/
+**/.venv/
+**/__venv__/
+
+# Environment files
+.env
+.env.*
+.env.local
+.env.production
+.env.development
+.env.test
+
+# Hidden directories and files
+.*
+!.gitignore
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Temporary files
+temp/
+tmp/
+*.tmp
+
+# Model cache and data
+models/
+model_cache/
+.cache/
+
+# Git
+.git/
+.gitignore
+
+# Docker files (don't include other Dockerfiles)
+*/Dockerfile
+*/docker-compose.yml
+
+# Node modules (if any)
+node_modules/
+
+# Test files
+tests/
+test/
+.pytest_cache/
+
+# Documentation
+docs/
+*.md
+
+# Lock files from individual services (we use the unified one)
+*/uv.lock
+*/requirements.txt
+*/pyproject.toml
+**/uv.lock
+**/requirements.txt
+**/pyproject.toml
+
+# But keep the root pyproject.toml
+!pyproject.toml
+
+# Python cache in subdirectories
+*/__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class

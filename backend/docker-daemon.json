@@ -1,9 +1,0 @@
-{
-  "registry-mirrors": [
-    "https://docker.xuanyuan.me"
-  ],
-  "insecure-registries": [],
-  "max-concurrent-downloads": 10,
-  "max-concurrent-uploads": 5,
-  "storage-driver": "overlay2"
-}

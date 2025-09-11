@@ -1,0 +1,79 @@
+[project]
+name = "intrascribe-backend"
+version = "0.1.0"
+description = "Unified backend services for Intrascribe platform"
+requires-python = ">=3.12"
+dependencies = [
+    # Core web framework and API
+    "fastapi>=0.104.1",
+    "uvicorn[standard]>=0.24.0",
+    "gunicorn>=21.2.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "python-multipart>=0.0.6",
+    "httpx>=0.25.2",
+    
+    # Configuration and environment
+    "python-dotenv>=1.0.0",
+    "pyyaml>=6.0.1",
+    "pyjwt>=2.8.0",
+    
+    # Audio processing
+    "librosa>=0.10.1",
+    "soundfile>=0.12.1",
+    "numpy>=1.24.3",
+    
+    # Machine Learning and AI models
+    "torch>=2.1.0",
+    "torchaudio>=2.1.0",
+    "pyannote-audio>=3.1.1",  # Speaker diarization
+    "funasr>=1.2.6",          # Speech-to-text
+    
+    # AI/LLM services
+    "anthropic>=0.34.0",
+    "openai>=1.50.0",
+    "litellm>=1.50.0",
+    "tiktoken>=0.7.0",
+    
+    # LiveKit for real-time features
+    "livekit>=0.10.1",
+    "livekit-api>=0.10.1",
+    "livekit[plugins]>=0.10.1",
+    "livekit-agents[cartesia,deepgram,openai,silero,turn-detector]~=1.2",
+    "livekit-plugins-noise-cancellation~=0.2",
+    
+    # Database and storage
+    "supabase>=2.0.0",
+    "redis>=6.4.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "mypy>=1.0.0",
+]
+
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["*"]
+
+[tool.black]
+line-length = 88
+target-version = ['py312']
+
+[tool.isort]
+profile = "black"
+line_length = 88
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
