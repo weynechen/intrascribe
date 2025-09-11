@@ -104,8 +104,8 @@ intrascribe/
 # 快速开始
 
 ## 1. 安装依赖
-此项目有大量的依赖
-- nvidia GPU 电脑，cuda驱动升级到最新版本。（理论上也支持纯CPU，但我没有测试过）
+此项目有大量的依赖需要安装：
+- 需要nvidia GPU 电脑，并cuda驱动升级到最新版本。
 - Node.js 18+
 - Python 3.12 与 uv（python 包管理/运行器），参考：https://docs.astral.sh/uv/getting-started/installation/#installation-methods
 
@@ -149,6 +149,7 @@ git clone https://github.com/weynechen/intrascribe.git
 cd intrascribe
 ```
 ## 3. 配置环境
+若此步不知道密钥从哪里来，可先运行第4步，根据脚本报错信息来填写。
 ```bash
 cd backend
 cp .env.example .env
