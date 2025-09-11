@@ -14,3 +14,7 @@ wheels/
 *.pem
 node_modules
 logs/
+*.crt
+*.key
+cert.conf
+backup/

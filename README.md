@@ -102,9 +102,9 @@ intrascribe/
 ---
 
 # 快速开始
-当前我仅在ubuntu 22.04上进行开发和测试，其余Linux平台理论上也支持。但windows和mac可能异常较多。
-## 前置条件
 
+## 1. 安装依赖
+此项目有大量的依赖
 - nvidia GPU 电脑，cuda驱动升级到最新版本。（理论上也支持纯CPU，但我没有测试过）
 - Node.js 18+
 - Python 3.12 与 uv（python 包管理/运行器），参考：https://docs.astral.sh/uv/getting-started/installation/#installation-methods
@@ -140,17 +140,41 @@ intrascribe/
   ```sh
   sudo systemctl status redis-server
   ```
+- nginx
+- huggingface token
 
-- 访问huggingface，获取自己的token。
-
-## 克隆项目到本地
-随后，将本项目clone到本地。
-
+## 2. 克隆项目到本地
 ```bash
 git clone https://github.com/weynechen/intrascribe.git
 cd intrascribe
 ```
+## 3. 配置环境
+```bash
+cd backend
+cp .env.example .env
+```
+修改.env中的密钥
 
+同样的，配置前端的密钥
+```bash
+cd web
+cp .env.local.example .env
+```
+修改密钥。
+
+## 4. 运行脚本
+直接运行脚本
+```bash
+./run.sh
+```
+此脚本会检查环境是否满足，提示安装，最后运行完成。
+
+备注：
+当前我仅在ubuntu 22.04上进行开发和测试，其余Linux平台理论上也支持。windows和mac暂不支持部署。
+
+
+# 手动运行
+如果执行上述脚本出问题，可按如下步骤逐步运行测试。
 
 ## 启动数据库
 ```bash
@@ -200,7 +224,7 @@ livekit-server --dev
 随后，修改配置，将其中的 `your-key`和`your-token` 替换成真实的值。
 
 
-## 使用一键启动脚本
+## 启动服务
 
 ```bash
 # 启动所有服务
@@ -223,72 +247,9 @@ livekit-server --dev
 ./start-dev.sh help
 ```
 
-## 使用docker（未测试）
-除了启动脚本外，也可以选择docker启动。
-进入后端目录并启动所有微服务：
-```sh
-docker-compose up
-```
+# 关于docker
+此项目依赖巨多，docker部分暂不做开发。如有需要，backend 和web下有Dockerfile，可自行修改使用。其中backend为缩小image 尺寸，做了聚合的，没有为每个微服务写Dockerfile。
 
-
-启动成功后，服务端点如下：
-- **API 服务**：http://localhost:8000 （主要业务逻辑）
-- **STT 服务**：http://localhost:8001 （语音转文字）
-- **说话人分离服务**：http://localhost:8002 （说话人分离）
-- **Web 应用**：http://localhost:3000 （前端界面）
-
-
-
-备注：
-1. 目前我只在 ubuntu22.04 进行过安装测试。
-2. 如默认端口更改，需要修改 `next.config.js` 中的代理。
-3. 在局域网内使用，最好搭配 nginx 做https代理（没有在仓库中，需自行搭建）。本项目提供next.js代理方式，操作如下：
-
-
-##  局域网访问
-上述启动启动是http的服务，涉及麦克风权限，从其他PC上访问时，浏览器会拒绝访问。因此需要配置为https。当前项目支持next.js自身的代理服务。（生产需要自行替换为nginx作为代理）
-
-### 安装mkcert
-
-``` bash
-cd web
-
-# 1. 安装依赖
-sudo apt update
-sudo apt install libnss3-tools
-
-# 2. 下载mkcert
-wget https://github.com/FiloSottile/mkcert/releases/download/v1.4.4/mkcert-v1.4.4-linux-amd64
-
-# 3. 添加执行权限并移动到系统路径
-chmod +x mkcert-v1.4.4-linux-amd64
-sudo mv mkcert-v1.4.4-linux-amd64 /usr/local/bin/mkcert
-
-# 4. 验证安装
-mkcert -version
-```
-
-### 创建本地CA和证书
-
-```bash
-# 1. 安装本地CA到系统信任存储
-mkcert -install
-
-# 2. 为localhost生成证书
-mkcert localhost 127.0.0.1 ::1
-```
-执行后会生成两个文件：
-localhost+2.pem (证书文件)
-localhost+2-key.pem (私钥文件)
-
-随后运行
-
-```bash
-npm run dev_https
-```
-随后可在局域网内通过 https://you_machine_ip:3000 访问
-
-如果是一键脚本启动的，可将`npm run dev` 替换为上述。
 
 
 # 运行流程（端到端）
