@@ -40,6 +40,7 @@ get_local_ip() {
 
 LOCAL_IP=$(get_local_ip)
 # 去掉域名，直接使用IP访问
+DOMAIN_NAME="$LOCAL_IP"
 
 # Service Ports
 declare -A SERVICE_PORTS=(
@@ -236,13 +237,6 @@ check_dependencies() {
         missing_deps+=("nginx")
     fi
     
-    # Check if HUGGINGFACE_TOKEN is set
-    if [[ -n "${HUGGINGFACE_TOKEN:-}" ]]; then
-        print_success "HUGGINGFACE_TOKEN is set"
-    else
-        print_warning "HUGGINGFACE_TOKEN not set (required for diarization service)"
-        print_status "Set it with: export HUGGINGFACE_TOKEN=your_token_here"
-    fi
     
     # Report missing dependencies
     if [[ ${#missing_deps[@]} -gt 0 ]]; then
@@ -942,7 +936,7 @@ check_livekit() {
         return 0
     fi
     
-    print_warning "LiveKit Server is not running. Starting LiveKit Server..."
+    print_status "LiveKit Server is not running. Starting LiveKit Server..."
     
     # Start LiveKit server in background
     livekit-server --dev >"$LOG_DIR/livekit.log" 2>&1 &
