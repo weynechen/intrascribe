@@ -1,7 +1,7 @@
 # 此docker file 是将各个微服务聚合在一起的镜像。为了缩小体积而设定，仅做测试使用。
 # 使用了国内镜像，如果不在国内，需自行修改镜像地址。
 # Use Python 3.12 with Ubuntu base for ML dependencies
-FROM docker.xuanyuan.me/library/python:3.12-slim
+FROM python:3.12-slim
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1

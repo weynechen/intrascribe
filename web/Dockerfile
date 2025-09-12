@@ -1,7 +1,7 @@
 # 使用了国内镜像，如果不在国内，需自行修改镜像地址。
 
 # Next.js Web Application Dockerfile for HTTPS Development
-FROM docker.xuanyuan.me/library/node:18-alpine AS base
+FROM node:18-alpine AS base
 
 # Install dependencies and mkcert for SSL certificate generation
 FROM base AS deps
