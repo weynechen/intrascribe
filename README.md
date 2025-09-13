@@ -215,7 +215,7 @@ supabase db reset
 如果需要重启supabase，运行
 ```bash
 supabase stop
-supabase start
+sudo supabase start -x edge-runtime
 ```
 
 ## 启动livekit-server

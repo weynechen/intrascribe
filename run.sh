@@ -188,7 +188,7 @@ check_dependencies() {
         if ollama list | grep -q "qwen2.5:8b\|qwen3:8b"; then
             print_success "qwen model is available"
         else
-            print_warning "qwen model not found. You may need to run: ollama pull qwen2.5:8b"
+            print_warning "qwen model not found. You may need to run: ollama pull qwen2.5:8b , or change ai_config.yaml to use other model"
         fi
     else
         print_error "ollama not found"
@@ -217,7 +217,8 @@ check_dependencies() {
     if command_exists livekit-server; then
         print_success "LiveKit server is installed"
     else
-        print_warning "LiveKit server not found (you can use LiveKit Cloud instead)"
+        print_error "livekit-server not found"
+        missing_deps+=("livekit-server")
     fi
     
     # Check redis-server
@@ -273,6 +274,9 @@ check_dependencies() {
                     ;;
                 "nginx")
                     echo "  • Nginx: sudo apt install nginx"
+                    ;;
+                "livekit-server")
+                    echo "  • LiveKit Server: curl -sSL https://get.livekit.io | bash"
                     ;;
             esac
         done
@@ -784,7 +788,7 @@ setup_environment() {
 wait_for_service() {
     local url="$1"
     local service_name="$2"
-    local max_attempts=30
+    local max_attempts=300
     local attempt=0
     
     print_status "Waiting for $service_name to be ready..."
@@ -958,11 +962,9 @@ start_web() {
     
     cd "$WEB_DIR"
     
-    # Check if node_modules exists
-    if [ ! -d "node_modules" ]; then
-        print_status "Installing web dependencies..."
-        npm install
-    fi
+    # # Always install/update dependencies to avoid timeout issues
+    # print_status "Installing/updating web dependencies..."
+    # npm install
     
     print_status "Starting Next.js development server..."
     npm run dev >"$LOG_DIR/web.log" 2>&1 &
@@ -1003,14 +1005,12 @@ start_microservices() {
         
         cd "$service_dir"
         
-        # Install/sync dependencies if needed
-        if [ ! -f "uv.lock" ] || [ "pyproject.toml" -nt "uv.lock" ]; then
-            print_status "Syncing dependencies for $service..."
-            if [ "$service" = "diarization_service" ]; then
-                export HF_ENDPOINT=https://hf-mirror.com
-            fi
-            uv sync
+        # Always sync dependencies to avoid timeout issues
+        print_status "Syncing dependencies for $service..."
+        if [ "$service" = "diarization_service" ]; then
+            export HF_ENDPOINT=https://hf-mirror.com
         fi
+        uv sync
         
         # Start the service
         if [ "$service" = "diarization_service" ]; then
@@ -1049,11 +1049,9 @@ start_api_service() {
     
     print_status "Starting $service on port $port..."
     
-    # Install/sync dependencies if needed
-    if [ ! -f "uv.lock" ] || [ "pyproject.toml" -nt "uv.lock" ]; then
-        print_status "Syncing dependencies for $service..."
-        uv sync
-    fi
+    # Always sync dependencies to avoid timeout issues
+    print_status "Syncing dependencies for $service..."
+    uv sync
     
     # Start the API service
     uv run main.py >"$LOG_DIR/${service}.log" 2>&1 &
@@ -1089,12 +1087,10 @@ start_agent() {
     
     print_status "Starting LiveKit transcription agent..."
     
-    # Install/sync dependencies if needed
-    if [ ! -f "uv.lock" ] || [ "pyproject.toml" -nt "uv.lock" ]; then
-        print_status "Syncing dependencies for agent..."
-        export HF_ENDPOINT=https://hf-mirror.com
-        uv sync
-    fi
+    # Always sync dependencies to avoid timeout issues
+    print_status "Syncing dependencies for agent..."
+    export HF_ENDPOINT=https://hf-mirror.com
+    uv sync
     
     # Start the agent
     HF_ENDPOINT=https://hf-mirror.com uv run agent.py dev >"$LOG_DIR/agent.log" 2>&1 &
