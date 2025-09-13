@@ -874,7 +874,7 @@ check_supabase() {
     # Navigate to supabase directory and start
     cd "$SCRIPT_DIR/supabase"
     
-    if supabase start -x edge-runtime; then
+    if sudo supabase start -x edge-runtime; then
         print_success "Supabase started successfully"
         wait_for_service "http://127.0.0.1:54321/health" "Supabase"
     else
@@ -962,9 +962,9 @@ start_web() {
     
     cd "$WEB_DIR"
     
-    # # Always install/update dependencies to avoid timeout issues
-    # print_status "Installing/updating web dependencies..."
-    # npm install
+    # Always install/update dependencies to avoid timeout issues
+    print_status "Installing/updating web dependencies..."
+    npm install
     
     print_status "Starting Next.js development server..."
     npm run dev >"$LOG_DIR/web.log" 2>&1 &
