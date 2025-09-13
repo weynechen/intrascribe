@@ -36,7 +36,6 @@ function DirectLiveKitRecorderInner({ onTranscript, onRecordingStateChange, onSe
   const [isMuted, setIsMuted] = useState(false)
   const [audioLevel, setAudioLevel] = useState(0)
   const [currentTime, setCurrentTime] = useState('00:00')
-  const [roomName, setRoomName] = useState('')
 
   const { session: authSession } = useAuth()
   const room = useRoomContext()
@@ -144,7 +143,6 @@ function DirectLiveKitRecorderInner({ onTranscript, onRecordingStateChange, onSe
       
       // 使用房间名称作为会话ID
       if (room.name) {
-        setRoomName(room.name)
         onSessionCreated?.(room.name)
       }
     }
@@ -294,13 +292,6 @@ function DirectLiveKitRecorderInner({ onTranscript, onRecordingStateChange, onSe
       <div className="text-2xl font-mono text-gray-700">
         {currentTime}
       </div>
-
-      {/* 房间信息 */}
-      {roomName && (
-        <div className="text-sm text-gray-500">
-          房间: {roomName}
-        </div>
-      )}
 
       {/* 控制按钮 */}
       <div className="flex space-x-4">

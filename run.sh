@@ -470,6 +470,22 @@ server {
         proxy_read_timeout 86400;
     }
     
+    # Supabase Storage - direct proxy for /storage/ requests
+    location /storage/ {
+        proxy_pass http://127.0.0.1:54321/storage/;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 300;
+        
+        # Support range requests for audio/video files
+        proxy_set_header Range \$http_range;
+        proxy_set_header If-Range \$http_if_range;
+        proxy_cache_bypass \$http_range;
+    }
+    
     # Supabase Studio
     location /studio/ {
         proxy_pass http://127.0.0.1:54323/;
@@ -611,12 +627,12 @@ auto_update_env_urls() {
             updated=true
         fi
         
-        # 3. NEXT_PUBLIC_API_URL - 使用nginx反向代理
-        if ! grep -q "^NEXT_PUBLIC_API_URL=" "$env_file"; then
-            echo "NEXT_PUBLIC_API_URL=https://$LOCAL_IP/api" >> "$env_file"
+        # 3. NEXT_PUBLIC_API_SERVER_URL - 使用nginx反向代理
+        if ! grep -q "^NEXT_PUBLIC_API_SERVER_URL=" "$env_file"; then
+            echo "NEXT_PUBLIC_API_SERVER_URL=https://$LOCAL_IP/api" >> "$env_file"
             updated=true
-        elif ! grep -q "NEXT_PUBLIC_API_URL=https://$LOCAL_IP/api" "$env_file"; then
-            sed -i "s|NEXT_PUBLIC_API_URL=.*|NEXT_PUBLIC_API_URL=https://$LOCAL_IP/api|g" "$env_file"
+        elif ! grep -q "NEXT_PUBLIC_API_SERVER_URL=https://$LOCAL_IP/api" "$env_file"; then
+            sed -i "s|NEXT_PUBLIC_API_SERVER_URL=.*|NEXT_PUBLIC_API_SERVER_URL=https://$LOCAL_IP/api|g" "$env_file"
             updated=true
         fi
         
@@ -775,7 +791,7 @@ setup_environment() {
     echo -e "  • Backend LiveKit: ${YELLOW}$(grep "LIVEKIT_API_URL" "$backend_env" | cut -d'=' -f2)${NC} (returned to frontend)"
     echo -e "  • Frontend Supabase: ${YELLOW}$(grep "NEXT_PUBLIC_SUPABASE_URL" "$web_env" | cut -d'=' -f2)${NC} (browser access)"
     echo -e "  • Frontend LiveKit: ${YELLOW}$(grep "NEXT_PUBLIC_LIVEKIT_URL" "$web_env" | cut -d'=' -f2)${NC} (WebRTC)"
-    echo -e "  • Frontend API: ${YELLOW}$(grep "NEXT_PUBLIC_API_URL" "$web_env" | cut -d'=' -f2 2>/dev/null || echo "Not set")${NC} (browser access)"
+    echo -e "  • Frontend API: ${YELLOW}$(grep "NEXT_PUBLIC_API_SERVER_URL" "$web_env" | cut -d'=' -f2 2>/dev/null || echo "Not set")${NC} (browser access)"
     
     if [[ "$needs_restart" == "true" ]]; then
         print_success "Environment URLs updated for LAN access"
@@ -826,10 +842,8 @@ display_access_info() {
     echo ""
     
     echo -e "${BLUE}💡 Client Setup Instructions:${NC}"
-    echo -e "  1. Add to client hosts file: ${YELLOW}$LOCAL_IP $DOMAIN_NAME${NC}"
-    echo -e "     • Linux/Mac: sudo echo '$LOCAL_IP $DOMAIN_NAME' >> /etc/hosts"
-    echo -e "     • Windows: Add '$LOCAL_IP $DOMAIN_NAME' to C:\\Windows\\System32\\drivers\\etc\\hosts"
-    echo -e "  2. Accept the self-signed certificate in your browser"
+    echo -e "  1. Accept the self-signed certificate in your browser"
+    echo -e "  2. Do not use firefox"
     echo -e "  3. Access: ${CYAN}https://$DOMAIN_NAME${NC}"
     echo ""
     
@@ -965,9 +979,10 @@ start_web() {
     # Always install/update dependencies to avoid timeout issues
     print_status "Installing/updating web dependencies..."
     npm install
+    npm run build
     
     print_status "Starting Next.js development server..."
-    npm run dev >"$LOG_DIR/web.log" 2>&1 &
+    npm run start >"$LOG_DIR/web.log" 2>&1 &
     local web_pid=$!
     PIDS+=("$web_pid")
     
