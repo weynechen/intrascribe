@@ -710,20 +710,14 @@ export default function HomePage() {
         }
       }, 100)
       
-      // 兜底：极短音频瞬间完成时可能未经历 processing，这里短轮询最多4秒
+      // 兜底：只在超时情况下关闭重新转录遮罩，不要因为completed状态就立即关闭
+      // 让正常的状态检测逻辑来处理completed状态的情况
       const startTs = Date.now()
       const fallbackCheck = () => {
         if (!isRetranscribingRef.current) return
-        const s = sessionsRef.current.find(s => s.id === retranscribeSessionId)
-        if (s && s.status === 'completed') {
-          console.log('✅ 兜底检测：会话为completed，关闭重新转录遮罩')
-          setIsRetranscribing(false)
-          setHasSeenProcessing(false)
-          setRetranscribeBaseline(null)
-          setForceHideRetranscribeOverlay(true)
-          return
-        }
-        if (Date.now() - startTs > 4000) {
+        
+        // 只有超时才强制关闭，不要因为completed就关闭
+        if (Date.now() - startTs > 8000) { // 增加超时时间到8秒
           console.log('⏱️ 兜底检测超时，关闭重新转录遮罩')
           setIsRetranscribing(false)
           setHasSeenProcessing(false)
@@ -731,9 +725,9 @@ export default function HomePage() {
           setForceHideRetranscribeOverlay(true)
           return
         }
-        setTimeout(fallbackCheck, 300)
+        setTimeout(fallbackCheck, 500)
       }
-      setTimeout(fallbackCheck, 400)
+      setTimeout(fallbackCheck, 2000) // 延迟到2秒后才开始检查
       
     } catch (error: unknown) {
       const err = error as { response?: { status?: number }; message?: string }
@@ -894,6 +888,45 @@ export default function HomePage() {
   useEffect(() => { sessionsRef.current = sessions }, [sessions])
   useEffect(() => { isRetranscribingRef.current = isRetranscribing }, [isRetranscribing])
   
+  // 监听重新转录完成事件
+  useEffect(() => {
+    const handleRetranscriptionCompleted = (event: CustomEvent) => {
+      const { sessionId, result } = event.detail
+      console.log('🔔 收到重新转录完成事件:', { sessionId, result })
+      
+      // 如果是当前选中的会话，强制刷新数据并更新转录内容
+      if (sessionId === selectedSessionId) {
+        console.log('🔄 强制刷新当前会话的转录数据')
+        
+        // 立即刷新会话数据
+        fetchSessions()
+        
+        // 延迟一点再次刷新，确保数据完全同步
+        setTimeout(() => {
+          fetchSessions()
+          
+          // 强制设置状态以触发转录内容更新
+          setIsRetranscribing(false)
+          setHasSeenProcessing(false)
+          setRetranscribeBaseline(null)
+          
+          // 强制清空当前转录内容，触发重新加载
+          setCurrentTranscript([])
+          
+          toast.success('说话人识别完成！转录内容已更新', {
+            duration: 3000
+          })
+        }, 1000)
+      }
+    }
+    
+    window.addEventListener('retranscriptionCompleted', handleRetranscriptionCompleted as EventListener)
+    
+    return () => {
+      window.removeEventListener('retranscriptionCompleted', handleRetranscriptionCompleted as EventListener)
+    }
+  }, [selectedSessionId, fetchSessions])
+
   // 监听选中会话的状态变化，自动刷新转录内容
   useEffect(() => {
     if (!selectedSessionId) return
@@ -903,6 +936,16 @@ export default function HomePage() {
       console.log('⚠️ 监听状态变化时未找到选中会话:', selectedSessionId)
       return
     }
+    
+    // 调试日志：会话状态变化监听
+    console.log('🔍 监听会话状态变化:', {
+      sessionId: selectedSessionId,
+      status: selectedSession.status,
+      isRetranscribing,
+      hasSeenProcessing,
+      transcriptionsCount: selectedSession.transcriptions?.length || 0,
+      currentTranscriptLength: currentTranscript.length
+    })
     
     // 跟踪是否看到过 processing 状态
     if (selectedSession.status === 'processing' && isRetranscribing && !hasSeenProcessing) {
@@ -919,10 +962,17 @@ export default function HomePage() {
       // }, 10000)
     }
     
+    // 检查是否需要更新转录内容（重新转录完成或首次加载）
+    let shouldUpdateTranscript = false
+    let justCompletedRetranscription = false
+    
     // 重新转录完成检测：只有在看到 processing 后变为 completed 才重置
     if (isRetranscribing && hasSeenProcessing && selectedSession.status === 'completed') {
+      console.log('✅ 检测到重新转录完成（路径1）:', { isRetranscribing, hasSeenProcessing, status: selectedSession.status })
       setIsRetranscribing(false)
       setHasSeenProcessing(false)
+      shouldUpdateTranscript = true
+      justCompletedRetranscription = true
       toast.success('转录重新处理完成！', {
         duration: 4000
       })
@@ -942,27 +992,65 @@ export default function HomePage() {
             ? (t?.segments as string).length
             : 0
       }
+      console.log('🔍 检查转录变化:', { 
+        isRetranscribing, 
+        hasBaseline: !!retranscribeBaseline, 
+        currentSignature, 
+        retranscribeBaseline,
+        idChanged: currentSignature.id !== retranscribeBaseline?.id,
+        contentLengthChanged: currentSignature.contentLength !== retranscribeBaseline?.contentLength,
+        segmentsLengthChanged: currentSignature.segmentsLength !== retranscribeBaseline?.segmentsLength
+      })
+      
       if (retranscribeBaseline && (
         currentSignature.id !== retranscribeBaseline.id ||
         currentSignature.contentLength !== retranscribeBaseline.contentLength ||
         currentSignature.segmentsLength !== retranscribeBaseline.segmentsLength
       )) {
+        console.log('✅ 检测到重新转录完成（路径2）:', { currentSignature, retranscribeBaseline })
         setIsRetranscribing(false)
         setHasSeenProcessing(false)
         setRetranscribeBaseline(null)
+        shouldUpdateTranscript = true
+        justCompletedRetranscription = true
         toast.success('转录重新处理完成！', { duration: 4000 })
       }
     }
     
-    // 正常的转录内容加载（首次加载或切换会话）
+    // 转录内容加载条件：首次加载、重新转录完成、或者当前内容为空
+    console.log('🔍 检查是否需要更新转录内容:', {
+      status: selectedSession.status,
+      hasTranscriptions: !!selectedSession.transcriptions,
+      transcriptionsLength: selectedSession.transcriptions?.length || 0,
+      currentTranscriptEmpty: currentTranscript.length === 0,
+      shouldUpdateTranscript,
+      justCompletedRetranscription
+    })
+    
     if (selectedSession.status === 'completed' && 
         selectedSession.transcriptions && 
         selectedSession.transcriptions.length > 0 &&
-        currentTranscript.length === 0) {
+        (currentTranscript.length === 0 || shouldUpdateTranscript)) {
       
       const transcription = selectedSession.transcriptions[0]
       
-      // 重新构建转录界面数据（简化版，不涉及重新转录检测）
+      console.log('🔄 开始更新转录内容显示:', {
+        transcriptionId: transcription.id,
+        segmentsCount: Array.isArray(transcription.segments) ? transcription.segments.length : 0,
+        contentLength: transcription.content ? transcription.content.length : 0,
+        justCompletedRetranscription
+      })
+      
+      // 日志记录转录内容更新
+      if (justCompletedRetranscription) {
+        console.log('🔄 重新转录完成，更新转录内容显示:', {
+          transcriptionId: transcription.id,
+          segmentsCount: Array.isArray(transcription.segments) ? transcription.segments.length : 0,
+          contentLength: transcription.content ? transcription.content.length : 0
+        })
+      }
+      
+      // 重新构建转录界面数据
       if (transcription.segments && Array.isArray(transcription.segments) && transcription.segments.length > 0) {
         const transcriptItems = transcription.segments.map((segment: unknown, index: number) => {
           const segmentData = segment as { 
@@ -981,8 +1069,28 @@ export default function HomePage() {
           }
         }).filter((item: { text: string }) => item.text.trim().length > 0)
         
+        // 统计说话人信息用于日志
+        if (justCompletedRetranscription) {
+          const speakerStats = transcriptItems.reduce((acc, item) => {
+            const speaker = item.speaker || 'unknown'
+            acc[speaker] = (acc[speaker] || 0) + 1
+            return acc
+          }, {} as Record<string, number>)
+          console.log('👥 重新转录后说话人分布:', speakerStats)
+        }
+        
         setCurrentTranscript(transcriptItems)
         setFullTranscriptText(transcription.content || '')
+        
+        // 如果是重新转录完成，额外提示用户内容已更新
+        if (justCompletedRetranscription) {
+          const uniqueSpeakers = Array.from(new Set(transcriptItems.map(item => item.speaker))).filter(s => s !== 'unknown')
+          if (uniqueSpeakers.length > 1) {
+            toast.success(`说话人识别完成！识别到 ${uniqueSpeakers.length} 位说话人`, {
+              duration: 3000
+            })
+          }
+        }
       }
     }
     

@@ -97,14 +97,37 @@ export function useRecordingSessions() {
 
   // Handle transcription real-time updates
   const handleTranscriptionChangeRef = useRef((payload: any) => {
+    console.log('📝 转录实时更新事件:', {
+      eventType: payload.eventType,
+      sessionId: payload.new?.session_id || payload.old?.session_id,
+      transcriptionId: payload.new?.id || payload.old?.id,
+      timestamp: new Date().toISOString()
+    })
     
-    if (payload.eventType === 'UPDATE' && payload.new?.session_id) {
-      // Delayed refresh to ensure database operations are complete
+    if ((payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') && payload.new?.session_id) {
+      const sessionId = payload.new.session_id
+      
+      // 立即尝试更新会话数据，然后再延迟刷新确保完整性
+      if (lastUserIdRef.current) {
+        console.log('🔄 转录更新触发的立即数据刷新')
+        fetchSessions(lastUserIdRef.current)
+      }
+      
+      // 再次延迟刷新确保数据库操作完成
       setTimeout(() => {
         if (lastUserIdRef.current) {
+          console.log('🔄 转录更新触发的延迟数据刷新')
           fetchSessions(lastUserIdRef.current)
         }
-      }, 500)
+      }, 1000)
+      
+      // 对于可能的重新转录完成，额外等待后再刷新一次
+      setTimeout(() => {
+        if (lastUserIdRef.current) {
+          console.log('🔄 转录更新触发的最终数据刷新')
+          fetchSessions(lastUserIdRef.current)
+        }
+      }, 2500)
     }
   })
 
@@ -190,7 +213,7 @@ export function useRecordingSessions() {
               fetchSessions(lastUserIdRef.current)
             }
             
-            // 1秒后再刷新一次，确保转录数据完全同步
+            // 1.5秒后再刷新一次，确保转录数据完全同步
             setTimeout(() => {
               if (lastUserIdRef.current) {
                 console.log('🔄 重新转录完成后的延迟刷新')
@@ -205,6 +228,14 @@ export function useRecordingSessions() {
                 fetchSessions(lastUserIdRef.current)
               }
             }, 3000)
+            
+            // 5秒后兜底刷新，确保UI完全更新
+            setTimeout(() => {
+              if (lastUserIdRef.current) {
+                console.log('🔄 重新转录完成后的兜底刷新')
+                fetchSessions(lastUserIdRef.current)
+              }
+            }, 5000)
           }
         }
         break

@@ -967,6 +967,15 @@ export class APIClient {
       // 启动异步轮询，但不等待完成就返回
       this.pollV2TaskStatus(taskData.task_id).then(result => {
         console.log('✅ V2重新转录完成:', result)
+        
+        // 重新转录完成后，触发全局事件来通知前端更新
+        if (typeof window !== 'undefined') {
+          const event = new CustomEvent('retranscriptionCompleted', {
+            detail: { sessionId, result }
+          })
+          window.dispatchEvent(event)
+          console.log('🔔 触发重新转录完成事件:', { sessionId, result })
+        }
       }).catch(error => {
         console.error('❌ V2重新转录失败:', error)
       })
