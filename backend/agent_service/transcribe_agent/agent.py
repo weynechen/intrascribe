@@ -312,7 +312,10 @@ async def entrypoint(ctx: JobContext):
     # Create session with transcription functionality
     session = AgentSession(
         # VAD needed for non-streaming STT implementations
-        vad=silero.VAD.load(min_silence_duration=0.3),
+        vad=silero.VAD.load(min_silence_duration=0.3,
+        min_speech_duration=0.1,
+        activation_threshold=0.5,
+        ),
         stt=MicroserviceSTT(session_id),  # Use our STT implementation
     )
 
