@@ -107,7 +107,6 @@ export default function HomePage() {
 
   // Handle real-time transcription data
   const handleTranscript = useCallback((transcriptEvent: TranscriptEvent) => {
-    
     if (transcriptEvent.text.trim()) {
       // Check if it's complete text (summary when recording ends)
       if (transcriptEvent.text.length > 100 && transcriptEvent.text.includes(' ') && !transcriptEvent.timestamp) {
@@ -198,7 +197,6 @@ export default function HomePage() {
 
   // Handle recording session creation
   const handleSessionCreated = useCallback((roomName: string) => {
-    
     // Extract real session ID from room name
     let actualSessionId = roomName
     if (roomName.startsWith('intrascribe_room_')) {
@@ -208,8 +206,6 @@ export default function HomePage() {
     setCurrentRecordingSessionId(actualSessionId)
     // Auto-select newly created session
     setSelectedSessionId(actualSessionId)
-    
-    // Simplified: rely on real-time subscription INSERT/UPDATE events for auto-update
   }, [])
 
   // Handle audio time updates for transcript highlighting
@@ -367,16 +363,8 @@ export default function HomePage() {
     }
   }, [sessions, fetchSessions, processSessionData])
 
-  // 新的AI总结处理函数
+  // AI summary generation handler
   const handleAISummary = useCallback(async (templateId?: string) => {
-    console.log('🔍 handleAISummary调试:', { 
-      userId: user?.id, 
-      sessionId: selectedSessionId || currentRecordingSessionId, 
-      templateId,
-      templateIdType: typeof templateId,
-      isTemplateIdString: typeof templateId === 'string'
-    })
-    
     if (!fullTranscriptText && currentTranscript.length === 0) {
       toast.error('No transcription content available, cannot generate summary')
       return
@@ -389,14 +377,14 @@ export default function HomePage() {
       return
     }
 
-    // 确保有有效的会话ID
+    // Ensure valid session ID
     const sessionId = selectedSessionId || currentRecordingSessionId
     if (!sessionId) {
       toast.error('Cannot find valid recording session, please select a recording first')
       return
     }
 
-    // 如果没有传入templateId，使用会话选择的模板
+    // Use provided template ID or default
     let finalTemplateId = templateId
     if (!finalTemplateId) {
       const currentSession = sessions.find(s => s.id === sessionId)
@@ -404,31 +392,26 @@ export default function HomePage() {
         toast.error('Cannot find corresponding recording session, unable to generate summary')
         return
       }
-      // 注意：RecordingSession中暂时没有模板ID字段，使用默认模板
-      finalTemplateId = '' // 使用默认模板
+      finalTemplateId = '' // Use default template
     }
-    
-    console.log('🎯 使用的模板ID:', finalTemplateId)
 
-    console.log('🤖 开始生成AI总结，转录内容长度:', transcriptText.length)
     setShowAISummaryPanel(true)
     setIsLoadingSummary(true)
 
     try {
-      // 自动开始生成AI总结，使用指定的模板
+      // Generate AI summary with specified template
       const summaryResult = await generateSummary(sessionId, transcriptText, finalTemplateId)
       if (summaryResult) {
-        console.log('🔄 设置新的AI总结内容:', summaryResult.summary.length, '字符')
         setAiSummary(summaryResult.summary)
         
-        // 从刷新后的会话数据中获取AI总结ID
+        // Get AI summary ID from refreshed session data
         const refreshedSession = sessions.find(s => s.id === sessionId)
         if (refreshedSession?.ai_summaries && refreshedSession.ai_summaries.length > 0) {
           const latestSummary = refreshedSession.ai_summaries[0]
           setAiSummaryId(latestSummary.id)
         }
         
-        // 生成总结成功后，继续生成标题
+        // Generate title after summary
         const titleResult = await generateTitle(sessionId, transcriptText, summaryResult.summary)
         if (titleResult) {
           setAiTitle(titleResult.title)
@@ -437,42 +420,36 @@ export default function HomePage() {
         toast.success('AI summary and title generation completed')
       }
     } catch (error) {
-      console.error('生成AI总结失败:', error)
+      console.error('Failed to generate AI summary:', error)
       toast.error('Failed to generate AI summary')
     } finally {
       setIsLoadingSummary(false)
     }
-  }, [fullTranscriptText, currentTranscript, selectedSessionId, currentRecordingSessionId, generateSummary, generateTitle, user?.id, sessions])
+  }, [fullTranscriptText, currentTranscript, selectedSessionId, currentRecordingSessionId, generateSummary, generateTitle, sessions])
 
-  // 处理模板选择
+  // Handle template selection
   const handleTemplateSelect = useCallback(async (sessionId: string, templateId: string) => {
-    console.log('🎨 模板选择处理:', { sessionId, templateId })
-    
     try {
-      // 更新会话的模板选择
+      // Update session template selection
       if (apiClient) {
         await apiClient.updateSessionTemplate(sessionId, templateId)
-        console.log('✅ 会话模板已更新到服务器')
-        
-        // 刷新会话数据
         await fetchSessions()
-        toast.success('模板选择已保存')
+        toast.success('Template selection saved')
       } else {
-        console.error('❌ API客户端未初始化')
-        toast.error('无法保存模板选择')
+        toast.error('Unable to save template selection')
       }
     } catch (error) {
-      console.error('更新会话模板失败:', error)
-      toast.error('保存模板选择失败')
+      console.error('Failed to update session template:', error)
+      toast.error('Failed to save template selection')
     }
   }, [apiClient, fetchSessions])
 
-  // 处理删除录音会话
+  // Handle session deletion
   const handleDeleteSession = useCallback(async (sessionId: string) => {
-    if (window.confirm('确定要删除这条录音记录吗？此操作不可撤销。')) {
+    if (window.confirm('Are you sure you want to delete this recording? This action cannot be undone.')) {
       try {
         await deleteSession(sessionId)
-        // 如果删除的是当前选中的会话，清除选中状态和音频播放器状态
+        // Clear state if deleting currently selected session
         if (selectedSessionId === sessionId) {
           setSelectedSessionId('')
           setCurrentTranscript([])
@@ -482,48 +459,41 @@ export default function HomePage() {
           setAiSummaryId('')
           setTranscriptionId('')
           setShowAISummaryPanel(false)
-          
-          // 重置音频播放器相关状态
           setCurrentAudioTime(0)
           
-          // 如果有全局音频播放器控制，也停止播放
+          // Reset audio player
           if (window.audioPlayerSeekTo) {
             try {
-              // 尝试停止音频播放（通过seek到0来重置）
               window.audioPlayerSeekTo(0)
             } catch (error) {
-              console.log('重置音频播放器时出错:', error)
+              console.log('Error resetting audio player:', error)
             }
           }
-          
-          console.log('🧹 已清除删除会话的所有相关状态')
         }
       } catch (error) {
-        console.error('删除会话失败:', error)
-        toast.error('删除录音会话失败')
+        console.error('Failed to delete session:', error)
+        toast.error('Failed to delete recording session')
       }
     }
   }, [deleteSession, selectedSessionId])
 
-  // 处理AI总结更新
+  // Handle AI summary updates
   const handleSummaryUpdate = useCallback((summary: string) => {
     setAiSummary(summary)
   }, [])
 
-  // 处理AI标题更新
+  // Handle AI title updates
   const handleTitleUpdate = useCallback((title: string) => {
     setAiTitle(title)
   }, [])
 
-  // 处理刷新会话数据
+  // Handle session data refresh
   const handleRefreshSessions = useCallback(() => {
     if (user?.id) {
-      console.log('🔄 保存后刷新会话数据')
       fetchSessions()
     }
   }, [user?.id, fetchSessions])
 
-  // 格式化时间戳 - 将秒数转换为 HH:MM:SS:mmm 格式
   // Format duration in MM:SS format
   const formatDuration = (durationSeconds: number) => {
     if (!durationSeconds || durationSeconds <= 0) return "00:00"
@@ -541,10 +511,10 @@ export default function HomePage() {
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}:${milliseconds.toString().padStart(3, '0')}`
   }
 
-  // 重定向逻辑 - 使用独立的 useEffect
+  // Redirect logic - use independent useEffect
   useEffect(() => {
     if (!authLoading && !user) {
-      // 延迟重定向以避免React渲染冲突
+      // Delay redirect to avoid React rendering conflicts
       const timeoutId = setTimeout(() => {
         router.replace('/auth')
       }, 100)
@@ -553,16 +523,10 @@ export default function HomePage() {
     }
   }, [user, authLoading, router])
 
-  // 使用 useMemo 优化 recording 数据转换
+  // Optimize recording data conversion with useMemo
   const recordings = useMemo(() => {
-    console.log('🎯 转换会话数据为录音列表:', {
-      sessionsCount: sessions.length,
-      selectedSessionId,
-      firstFewSessions: sessions.slice(0, 3).map(s => ({ id: s.id, title: s.title, status: s.status }))
-    })
-    
     const converted = sessions.map(session => {
-      // 查找该会话的转录内容和AI总结
+      // Find transcription content and AI summary for this session
       const transcription = session.transcriptions?.[0]
       const aiSummary = session.ai_summaries?.[0]
       
@@ -572,36 +536,25 @@ export default function HomePage() {
         duration: formatDuration(session.duration_seconds || 0),
         transcript: transcription?.content || '',
         aiSummary: aiSummary?.summary || '',
-        aiTitle: session.title || '新建录音',
+        aiTitle: session.title || 'New Recording',
         status: session.status,
-        templateId: session.template_id || undefined // 使用真实的模板ID
+        templateId: session.template_id || undefined
       }
       
       return recording
     })
     
-    console.log('📋 转换后的录音列表:', {
-      recordingsCount: converted.length,
-      firstFewRecordings: converted.slice(0, 3).map(r => ({ 
-        id: r.id, 
-        title: r.aiTitle, 
-        status: r.status,
-        hasTranscript: !!r.transcript,
-        templateId: r.templateId
-      }))
-    })
-    
     return converted
-  }, [sessions, selectedSessionId])
+  }, [sessions])
 
-  // 获取选中的会话
+  // Get selected session
   const selectedSession = useMemo(() => {
     return sessions.find(s => s.id === selectedSessionId)
   }, [sessions, selectedSessionId])
 
   // Parse timestamp to extract start and end time in seconds
   const parseTimestamp = (timestamp: string) => {
-    // 如果是设计文档格式 [HH:MM:SS:mmm,HH:MM:SS:mmm]，解析为秒数
+    // If it's design document format [HH:MM:SS:mmm,HH:MM:SS:mmm], parse to seconds
     if (timestamp.startsWith('[') && timestamp.includes(',')) {
       const timeRange = timestamp.slice(1, -1) // Remove brackets
       const [startStr, endStr] = timeRange.split(',')
@@ -628,38 +581,37 @@ export default function HomePage() {
         end_time: parseTimeString(endStr)
       }
     }
-    // 如果不是时间范围格式，返回默认值
+    // If not time range format, return default values
     return { start_time: 0, end_time: 0 }
   }
 
   // Handle retranscription
   const handleRetranscribe = useCallback(async () => {
     if (!selectedSessionId) {
-      toast.error('请先选择一个会话')
+      toast.error('Please select a session first')
       return
     }
 
     const selectedSession = sessions.find(s => s.id === selectedSessionId)
     if (!selectedSession) {
-      toast.error('会话不存在')
+      toast.error('Session does not exist')
       return
     }
 
     if (selectedSession.status !== 'completed') {
-      toast.error('只有已完成的会话才能重新转录')
+      toast.error('Only completed sessions can be retranscribed')
       return
     }
 
     try {
-      console.log('🔄 开始重新转录会话:', selectedSessionId)
-      
-      // 保存当前选中的会话ID，防止在重新转录过程中丢失
+      // Save current selected session ID to prevent loss during retranscription
       const retranscribeSessionId = selectedSessionId
       
-      // 立即设置重新转录状态并显示遮罩
+      // Set retranscription state and show overlay
       setIsRetranscribing(true)
-      setHasSeenProcessing(false) // 重置处理状态标记
-      // 记录当前选中会话的转录签名，作为重新转录的基线
+      setHasSeenProcessing(false)
+      
+      // Record current transcription signature as baseline
       if (selectedSession?.transcriptions && selectedSession.transcriptions.length > 0) {
         const t = selectedSession.transcriptions[0] as unknown as { id?: string; content?: string; segments?: unknown }
         const segmentsLength = Array.isArray(t?.segments)
@@ -676,49 +628,40 @@ export default function HomePage() {
         setRetranscribeBaseline({ id: undefined, contentLength: 0, segmentsLength: 0 })
       }
       
-      // 立即显示重新转录的提示
-      toast.info('正在重新转录，请稍候...', { duration: 2000 })
+      toast.info('Retranscribing, please wait...', { duration: 2000 })
       
-      // 添加短暂延时，确保遮罩显示给用户看到
+      // Add brief delay to ensure overlay is visible
       await new Promise(resolve => setTimeout(resolve, 300))
       
-      // 调用重新转录API - 使用APIClient的专用方法
+      // Call retranscription API
       if (!apiClient) {
-        throw new Error('API客户端未初始化')
+        throw new Error('API client not initialized')
       }
 
       const response = await apiClient.retranscribeSession(retranscribeSessionId)
 
       if (!response.success) {
-        throw new Error(response.message || '重新转录请求失败')
+        throw new Error(response.message || 'Retranscription request failed')
       }
 
-      console.log('✅ 重新转录请求成功:', response)
-      toast.success('重新转录已开始，请等待处理完成')
+      toast.success('Retranscription started, please wait for completion')
       
-      // 确保在刷新会话数据后保持选中状态
-      console.log('🔒 重新转录过程中保持选中会话:', retranscribeSessionId)
-      
-      // 立即刷新会话列表以获取最新状态
+      // Refresh session list to get latest status
       await fetchSessions()
       
-      // 刷新后，确保选中的会话仍然有效（防止被重置）
+      // Ensure selected session remains valid after refresh
       setTimeout(() => {
         if (selectedSessionId !== retranscribeSessionId) {
-          console.log('🔧 重新转录后恢复选中会话:', retranscribeSessionId)
           setSelectedSessionId(retranscribeSessionId)
         }
       }, 100)
       
-      // 兜底：只在超时情况下关闭重新转录遮罩，不要因为completed状态就立即关闭
-      // 让正常的状态检测逻辑来处理completed状态的情况
+      // Fallback: only close overlay on timeout, not on completed status
       const startTs = Date.now()
       const fallbackCheck = () => {
         if (!isRetranscribingRef.current) return
         
-        // 只有超时才强制关闭，不要因为completed就关闭
-        if (Date.now() - startTs > 8000) { // 增加超时时间到8秒
-          console.log('⏱️ 兜底检测超时，关闭重新转录遮罩')
+        if (Date.now() - startTs > 8000) {
           setIsRetranscribing(false)
           setHasSeenProcessing(false)
           setRetranscribeBaseline(null)
@@ -727,23 +670,20 @@ export default function HomePage() {
         }
         setTimeout(fallbackCheck, 500)
       }
-      setTimeout(fallbackCheck, 2000) // 延迟到2秒后才开始检查
+      setTimeout(fallbackCheck, 2000)
       
     } catch (error: unknown) {
       const err = error as { response?: { status?: number }; message?: string }
-      console.error('❌ 重新转录失败:', error)
+      console.error('Retranscription failed:', error)
       
-      // 重新转录失败时重置状态
+      // Reset state on failure
       setIsRetranscribing(false)
       setHasSeenProcessing(false)
       
-      // 如果是API不存在的错误，我们回退到使用现有逻辑
       if (err.response?.status === 404 || err.message?.includes('404')) {
-        console.log('🔄 重新转录API不存在，尝试使用备用方法')
-        // 可以在这里添加备用的重新转录逻辑
-        toast.warning('重新转录功能暂时不可用，请稍后再试')
+        toast.warning('Retranscription feature temporarily unavailable, please try again later')
       } else {
-        toast.error(`重新转录失败: ${err.message}`)
+        toast.error(`Retranscription failed: ${err.message}`)
       }
       setRetranscribeBaseline(null)
     }
@@ -751,7 +691,6 @@ export default function HomePage() {
 
   // Handle transcript update for editing
   const handleTranscriptUpdate = useCallback(async (updatedTranscript: TranscriptItem[]) => {
-    console.log('📝 更新转录内容:', updatedTranscript.length, '条记录')
     setCurrentTranscript(updatedTranscript)
     
     // Update the full transcript text as well
@@ -760,57 +699,46 @@ export default function HomePage() {
     
     // Save to backend
     try {
-      // 优先使用selectedSessionId，如果没有则使用currentRecordingSessionId
+      // Prefer selectedSessionId, fallback to currentRecordingSessionId
       const sessionId = selectedSessionId || currentRecordingSessionId
       
       if (sessionId) {
-        console.log('📍 保存转录更新，使用会话ID:', sessionId)
-        
-        // 首先尝试从sessions状态中找到对应的会话
+        // Try to find corresponding session from sessions state
         let session = sessions.find(s => s.id === sessionId)
         let currentTranscriptionId = ''
         let originalSegments: unknown[] = []
         
         if (session && session.transcriptions && session.transcriptions.length > 0) {
-          // 从sessions状态中获取转录信息
+          // Get transcription info from sessions state
           currentTranscriptionId = session.transcriptions[0].id
           originalSegments = session.transcriptions[0].segments || []
-          console.log('✅ 从sessions状态中找到转录记录:', currentTranscriptionId)
         } else if (transcriptionId) {
-          // 如果sessions状态中没有，但有全局的transcriptionId变量，使用它
-          console.log('⚠️ sessions状态中未找到转录记录，使用全局transcriptionId:', transcriptionId)
+          // Use global transcriptionId if not found in sessions state
           currentTranscriptionId = transcriptionId
-          originalSegments = [] // 没有原始segments数据
+          originalSegments = []
         } else {
-          // 最后尝试：如果是刚转录完成的会话，可能转录记录已经存在但sessions还没更新
-          console.log('🔄 sessions状态可能未同步，尝试刷新后重试...')
-          
-          // 立即刷新sessions数据
+          // Last attempt: refresh sessions data if transcription record exists but sessions not updated
           await fetchSessions()
           
-          // 重新查找会话
+          // Re-find session
           const refreshedSessions = sessions
           session = refreshedSessions.find(s => s.id === sessionId)
           
           if (session && session.transcriptions && session.transcriptions.length > 0) {
             currentTranscriptionId = session.transcriptions[0].id
             originalSegments = session.transcriptions[0].segments || []
-            console.log('✅ 刷新后找到转录记录:', currentTranscriptionId)
           } else {
-            console.log('❌ 刷新后仍未找到转录记录，可能数据还未同步完成')
-            toast.warning('转录数据正在同步中，请稍后再试')
+            toast.warning('Transcription data is syncing, please try again later')
             return
           }
         }
         
-        console.log('💾 保存转录更新到服务器:', currentTranscriptionId)
-        
-        // 处理可能的字符串格式的segments
+        // Handle possible string format segments
         if (typeof originalSegments === 'string') {
           try {
             originalSegments = JSON.parse(originalSegments)
           } catch (error) {
-            console.error('解析原始segments失败:', error)
+            console.error('Failed to parse original segments:', error)
             originalSegments = []
           }
         }
@@ -840,80 +768,70 @@ export default function HomePage() {
           }
         })
         
-        console.log('🕒 构建的segments数据:', segments.map(s => ({ 
-          index: s.index, 
-          start_time: s.start_time, 
-          end_time: s.end_time, 
-          text: s.text.substring(0, 50) + '...' 
-        })))
-        
         // Call API to update transcription
         const supabaseModule = await import('@/lib/supabase')
         const token = supabaseModule.supabase ? (await supabaseModule.supabase.auth.getSession()).data.session?.access_token : null
         
-                  if (token) {
-            const apiClient = new supabaseModule.APIClient(
-              '/api/v1',
-              () => token
-            )
-          
+        if (token) {
+          const apiClient = new supabaseModule.APIClient(
+            '/api/v1',
+            () => token
+          )
+        
           await apiClient.updateTranscription(currentTranscriptionId, segments)
-          toast.success('转录内容已保存到服务器')
+          toast.success('Transcription content saved to server')
           
           // Refresh sessions to get updated data
           fetchSessions()
         } else {
-          toast.error('用户未登录，无法保存到服务器')
+          toast.error('User not logged in, unable to save to server')
         }
       } else {
-        toast.warning('未选择会话，仅在本地更新')
+        toast.warning('No session selected, only local update')
       }
     } catch (error) {
-      console.error('保存转录更新失败:', error)
-      toast.error('保存转录更新失败')
+      console.error('Failed to save transcription update:', error)
+      toast.error('Failed to save transcription update')
     }
   }, [selectedSessionId, currentRecordingSessionId, sessions, fetchSessions, transcriptionId])
 
-  // 添加状态跟踪是否正在重新转录
+  // Add state tracking for retranscription
   const [isRetranscribing, setIsRetranscribing] = useState(false)
   const [hasSeenProcessing, setHasSeenProcessing] = useState(false)
-  // 重新转录基线：记录发起重新转录时的转录签名，用于后续比对
+  // Retranscription baseline: record transcription signature when retranscription starts for comparison
   const [retranscribeBaseline, setRetranscribeBaseline] = useState<{ id?: string; contentLength: number; segmentsLength: number } | null>(null)
-  // 强制隐藏遮罩（兜底）
+  // Force hide overlay (fallback)
   const [forceHideRetranscribeOverlay, setForceHideRetranscribeOverlay] = useState(false)
-  // 引入refs以便在异步回调中拿到最新的sessions与标志位
+  // Use refs to get latest sessions and flags in async callbacks
   const sessionsRef = useRef(sessions)
   const isRetranscribingRef = useRef(isRetranscribing)
 
   useEffect(() => { sessionsRef.current = sessions }, [sessions])
   useEffect(() => { isRetranscribingRef.current = isRetranscribing }, [isRetranscribing])
   
-  // 监听重新转录完成事件
+  // Listen for retranscription completion events
   useEffect(() => {
     const handleRetranscriptionCompleted = (event: CustomEvent) => {
-      const { sessionId, result } = event.detail
-      console.log('🔔 收到重新转录完成事件:', { sessionId, result })
+      const { sessionId } = event.detail
       
-      // 如果是当前选中的会话，强制刷新数据并更新转录内容
+      // If it's the currently selected session, force refresh data and update transcription content
       if (sessionId === selectedSessionId) {
-        console.log('🔄 强制刷新当前会话的转录数据')
-        
-        // 立即刷新会话数据
+        // Immediately refresh session data
         fetchSessions()
         
-        // 延迟一点再次刷新，确保数据完全同步
+        // Delay and refresh again to ensure complete data sync
         setTimeout(() => {
           fetchSessions()
           
-          // 强制设置状态以触发转录内容更新
+          // Force set state to trigger transcription content update
           setIsRetranscribing(false)
           setHasSeenProcessing(false)
           setRetranscribeBaseline(null)
           
-          // 强制清空当前转录内容，触发重新加载
+          // Force clear current transcription content to trigger reload
           setCurrentTranscript([])
           
-          toast.success('说话人识别完成！转录内容已更新', {
+          toast.success('Speaker recognition completed! Transcription content updated', {
             duration: 3000
           })
         }, 1000)
@@ -927,58 +845,36 @@ export default function HomePage() {
     }
   }, [selectedSessionId, fetchSessions])
 
-  // 监听选中会话的状态变化，自动刷新转录内容
+  // Listen for selected session status changes, auto-refresh transcription content
   useEffect(() => {
     if (!selectedSessionId) return
     
     const selectedSession = sessions.find(s => s.id === selectedSessionId)
     if (!selectedSession) {
-      console.log('⚠️ 监听状态变化时未找到选中会话:', selectedSessionId)
       return
     }
     
-    // 调试日志：会话状态变化监听
-    console.log('🔍 监听会话状态变化:', {
-      sessionId: selectedSessionId,
-      status: selectedSession.status,
-      isRetranscribing,
-      hasSeenProcessing,
-      transcriptionsCount: selectedSession.transcriptions?.length || 0,
-      currentTranscriptLength: currentTranscript.length
-    })
-    
-    // 跟踪是否看到过 processing 状态
+    // Track if we've seen processing status
     if (selectedSession.status === 'processing' && isRetranscribing && !hasSeenProcessing) {
       setHasSeenProcessing(true)
-      
-      // 设置定时检查，防止状态变化被遗漏
-      // const checkInterval = setInterval(async () => {
-      //   await fetchSessions()
-      // }, 1000) // 每秒检查一次
-      
-      // // 10秒后清除定时器
-      // setTimeout(() => {
-      //   clearInterval(checkInterval)
-      // }, 10000)
     }
     
-    // 检查是否需要更新转录内容（重新转录完成或首次加载）
+    // Check if transcription content needs updating (retranscription completed or first load)
     let shouldUpdateTranscript = false
     let justCompletedRetranscription = false
     
-    // 重新转录完成检测：只有在看到 processing 后变为 completed 才重置
+    // Retranscription completion detection: only reset after seeing processing then completed
     if (isRetranscribing && hasSeenProcessing && selectedSession.status === 'completed') {
-      console.log('✅ 检测到重新转录完成（路径1）:', { isRetranscribing, hasSeenProcessing, status: selectedSession.status })
       setIsRetranscribing(false)
       setHasSeenProcessing(false)
       shouldUpdateTranscript = true
       justCompletedRetranscription = true
-      toast.success('转录重新处理完成！', {
+      toast.success('Transcription reprocessing completed!', {
         duration: 4000
       })
     }
 
-    // 补充完成检测：如果未能捕获到processing状态，但转录内容与基线相比发生变化，则视为完成
+    // Supplementary completion detection: if we couldn't catch processing status but transcription content changed compared to baseline
     if (isRetranscribing && selectedSession.status === 'completed') {
       const t = selectedSession.transcriptions && selectedSession.transcriptions.length > 0
         ? (selectedSession.transcriptions[0] as unknown as { id?: string; content?: string; segments?: unknown })
@@ -992,41 +888,22 @@ export default function HomePage() {
             ? (t?.segments as string).length
             : 0
       }
-      console.log('🔍 检查转录变化:', { 
-        isRetranscribing, 
-        hasBaseline: !!retranscribeBaseline, 
-        currentSignature, 
-        retranscribeBaseline,
-        idChanged: currentSignature.id !== retranscribeBaseline?.id,
-        contentLengthChanged: currentSignature.contentLength !== retranscribeBaseline?.contentLength,
-        segmentsLengthChanged: currentSignature.segmentsLength !== retranscribeBaseline?.segmentsLength
-      })
       
       if (retranscribeBaseline && (
         currentSignature.id !== retranscribeBaseline.id ||
         currentSignature.contentLength !== retranscribeBaseline.contentLength ||
         currentSignature.segmentsLength !== retranscribeBaseline.segmentsLength
       )) {
-        console.log('✅ 检测到重新转录完成（路径2）:', { currentSignature, retranscribeBaseline })
         setIsRetranscribing(false)
         setHasSeenProcessing(false)
         setRetranscribeBaseline(null)
         shouldUpdateTranscript = true
         justCompletedRetranscription = true
-        toast.success('转录重新处理完成！', { duration: 4000 })
+        toast.success('Transcription reprocessing completed!', { duration: 4000 })
       }
     }
     
-    // 转录内容加载条件：首次加载、重新转录完成、或者当前内容为空
-    console.log('🔍 检查是否需要更新转录内容:', {
-      status: selectedSession.status,
-      hasTranscriptions: !!selectedSession.transcriptions,
-      transcriptionsLength: selectedSession.transcriptions?.length || 0,
-      currentTranscriptEmpty: currentTranscript.length === 0,
-      shouldUpdateTranscript,
-      justCompletedRetranscription
-    })
-    
+    // Transcription content loading conditions: first load, retranscription completed, or current content is empty
     if (selectedSession.status === 'completed' && 
         selectedSession.transcriptions && 
         selectedSession.transcriptions.length > 0 &&
@@ -1034,23 +911,7 @@ export default function HomePage() {
       
       const transcription = selectedSession.transcriptions[0]
       
-      console.log('🔄 开始更新转录内容显示:', {
-        transcriptionId: transcription.id,
-        segmentsCount: Array.isArray(transcription.segments) ? transcription.segments.length : 0,
-        contentLength: transcription.content ? transcription.content.length : 0,
-        justCompletedRetranscription
-      })
-      
-      // 日志记录转录内容更新
-      if (justCompletedRetranscription) {
-        console.log('🔄 重新转录完成，更新转录内容显示:', {
-          transcriptionId: transcription.id,
-          segmentsCount: Array.isArray(transcription.segments) ? transcription.segments.length : 0,
-          contentLength: transcription.content ? transcription.content.length : 0
-        })
-      }
-      
-      // 重新构建转录界面数据
+      // Rebuild transcription interface data
       if (transcription.segments && Array.isArray(transcription.segments) && transcription.segments.length > 0) {
         const transcriptItems = transcription.segments.map((segment: unknown, index: number) => {
           const segmentData = segment as { 
@@ -1069,24 +930,14 @@ export default function HomePage() {
           }
         }).filter((item: { text: string }) => item.text.trim().length > 0)
         
-        // 统计说话人信息用于日志
-        if (justCompletedRetranscription) {
-          const speakerStats = transcriptItems.reduce((acc, item) => {
-            const speaker = item.speaker || 'unknown'
-            acc[speaker] = (acc[speaker] || 0) + 1
-            return acc
-          }, {} as Record<string, number>)
-          console.log('👥 重新转录后说话人分布:', speakerStats)
-        }
-        
         setCurrentTranscript(transcriptItems)
         setFullTranscriptText(transcription.content || '')
         
-        // 如果是重新转录完成，额外提示用户内容已更新
+        // If retranscription completed, show additional user notification
         if (justCompletedRetranscription) {
           const uniqueSpeakers = Array.from(new Set(transcriptItems.map(item => item.speaker))).filter(s => s !== 'unknown')
           if (uniqueSpeakers.length > 1) {
-            toast.success(`说话人识别完成！识别到 ${uniqueSpeakers.length} 位说话人`, {
+            toast.success(`Speaker recognition completed! Identified ${uniqueSpeakers.length} speakers`, {
               duration: 3000
             })
           }
@@ -1094,7 +945,7 @@ export default function HomePage() {
       }
     }
     
-    // 如果会话状态不是completed或processing，重置重新转录状态
+    // If session status is not completed or processing, reset retranscription state
     if (selectedSession.status !== 'completed' && selectedSession.status !== 'processing') {
       setIsRetranscribing(false)
       setHasSeenProcessing(false)
@@ -1120,24 +971,20 @@ export default function HomePage() {
     try {
       const sessionId = selectedSessionId || currentRecordingSessionId
       if (!sessionId) {
-        console.error('❌ 无法重命名说话人: 没有有效的会话ID')
-        toast.error('无法重命名说话人: 会话无效')
+        toast.error('Unable to rename speaker: invalid session')
         return
       }
-
-      console.log('🎭 重命名说话人:', { sessionId, oldSpeaker, newSpeaker })
 
       // Get authentication token
       const supabaseModule = await import('@/lib/supabase')
       const token = supabaseModule.supabase ? (await supabaseModule.supabase.auth.getSession()).data.session?.access_token : null
       
       if (!token) {
-        console.error('❌ 无法重命名说话人: 缺少认证令牌')
-        toast.error('无法重命名说话人: 认证失败')
+        toast.error('Unable to rename speaker: authentication failed')
         return
       }
 
-      // 使用统一API客户端更新说话人名称
+      // Use unified API client to update speaker name
       httpClient.setAuthTokenGetter(() => token)
       const result = await apiPost('api', `/v1/sessions/${sessionId}/rename-speaker`, {
         oldSpeaker,
@@ -1145,12 +992,10 @@ export default function HomePage() {
       }) as RenameSpeakerResponse
       
       if (result.success) {
-        console.log('✅ 说话人重命名成功')
-        toast.success(`说话人已重命名: ${oldSpeaker} → ${newSpeaker}`)
+        toast.success(`Speaker renamed: ${oldSpeaker} → ${newSpeaker}`)
         
-        // 立即更新当前转录内容中的说话人名称
+        // Immediately update speaker names in current transcript content
         if (currentTranscript.length > 0) {
-          console.log('🔄 立即更新界面中的说话人名称')
           const updatedTranscript = currentTranscript.map(item => ({
             ...item,
             speaker: item.speaker === oldSpeaker ? newSpeaker : item.speaker
@@ -1158,36 +1003,35 @@ export default function HomePage() {
           setCurrentTranscript(updatedTranscript)
         }
         
-        // 多次刷新确保数据同步，类似重新转录的处理方式
-        // 立即刷新第一次
+        // Multiple refreshes to ensure data sync, similar to retranscription handling
         await handleRefreshSessions()
         
-        // 1秒后再刷新一次，确保数据完全同步
+        // Refresh again after 1 second to ensure complete data sync
         setTimeout(async () => {
           await handleRefreshSessions()
           
-          // 重新处理选中会话的转录数据，确保界面完全更新
+          // Re-process selected session transcription data to ensure complete UI update
           const refreshedSessions = sessions.find(s => s.id === sessionId)
           if (refreshedSessions) {
             await processSessionData(refreshedSessions)
           }
         }, 1000)
         
-        // 3秒后最后一次刷新，确保所有数据都已同步
+        // Final refresh after 3 seconds to ensure all data is synced
         setTimeout(async () => {
           await handleRefreshSessions()
         }, 2000)
         
       } else {
-        throw new Error(result.message || '重命名说话人失败')
+        throw new Error(result.message || 'Speaker rename failed')
       }
     } catch (error) {
-      console.error('❌ 重命名说话人失败:', error)
-      toast.error(`重命名说话人失败: ${error instanceof Error ? error.message : '未知错误'}`)
+      console.error('Failed to rename speaker:', error)
+      toast.error(`Failed to rename speaker: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }, [selectedSessionId, currentRecordingSessionId, handleRefreshSessions, currentTranscript, sessions, processSessionData])
 
-  // 如果正在加载或未登录，显示加载界面
+  // Show loading interface if loading or not logged in
   if (authLoading || !user) {
     return (
       <div className="h-screen flex items-center justify-center bg-gray-100">
@@ -1292,7 +1136,7 @@ export default function HomePage() {
       />
       {renderMainContent()}
 
-      {/* Processing Overlay - 重新转录处理期间的全屏遮罩 */}
+      {/* Processing Overlay - Full screen overlay during retranscription processing */}
       {(selectedSession?.status === 'processing' || (isRetranscribing && !forceHideRetranscribeOverlay)) && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-8 max-w-md w-full mx-4 text-center">
@@ -1300,10 +1144,10 @@ export default function HomePage() {
               <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
             </div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              正在重新转录
+              Retranscribing
             </h3>
             <p className="text-gray-600 mb-4">
-              正在重新识别说话人和转录内容，这可能需要几分钟时间
+              Re-identifying speakers and transcribing content, this may take a few minutes
             </p>
             <div className="space-y-3">
               <div className="flex items-center justify-center space-x-2 text-sm text-gray-500">
@@ -1312,10 +1156,10 @@ export default function HomePage() {
                   <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
                   <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
                 </div>
-                <span>处理中...</span>
+                <span>Processing...</span>
               </div>
               <p className="text-xs text-gray-400">
-                请勿关闭页面或进行其他操作
+                Please do not close the page or perform other operations
               </p>
             </div>
           </div>

@@ -261,22 +261,22 @@ const subscriptionManager = {
       timestamp: new Date().toISOString()
     }
     
-    console.log('📊 当前订阅状态:', info)
+    console.log('Current subscription status:', info)
     return info
   },
 
-  // 健康检查
+  // Health check
   healthCheck() {
     const activeChannels = this.getActiveChannels()
     const now = Date.now()
     
-    console.log('🏥 订阅健康检查:', {
+    console.log('Subscription health check:', {
       activeChannelCount: activeChannels.length,
       channels: activeChannels,
       timestamp: new Date().toISOString()
     })
     
-    // 检查是否有过期的订阅（超过1小时的订阅）
+    // Check for expired subscriptions (subscriptions older than 1 hour)
     activeChannels.forEach(channelName => {
       const parts = channelName.split('-')
       const timestamp = parts[parts.length - 1]
@@ -285,22 +285,22 @@ const subscriptionManager = {
         const hours = age / (1000 * 60 * 60)
         
         if (hours > 1) {
-          console.warn(`⚠️ 发现过期订阅: ${channelName}, 存在时间: ${hours.toFixed(2)}小时`)
-          // 可以选择自动清理过期订阅
+          console.warn(`Found expired subscription: ${channelName}, age: ${hours.toFixed(2)} hours`)
+          // Can choose to auto-cleanup expired subscriptions
           // this.removeChannel(channelName)
         }
       }
     })
     
     return {
-      healthy: activeChannels.length < 10, // 假设超过10个订阅为异常
+      healthy: activeChannels.length < 10, // Assume more than 10 subscriptions is abnormal
       activeChannels: activeChannels.length,
       channels: activeChannels
     }
   }
 }
 
-// 在开发环境中暴露订阅管理器用于调试
+// Expose subscription manager for debugging in development environment
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
   const globalWindow = window as { 
     __subscriptionManager?: typeof subscriptionManager
@@ -313,15 +313,15 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
   }
   globalWindow.__subscriptionManager = subscriptionManager
   
-  // 开发环境下定期进行健康检查
+  // Periodic health checks in development environment
   setInterval(() => {
     const health = subscriptionManager.healthCheck()
     if (!health.healthy) {
-      console.warn('⚠️ 订阅健康检查失败:', health)
+      console.warn('Subscription health check failed:', health)
     }
-  }, 5 * 60 * 1000) // 每5分钟检查一次
+  }, 5 * 60 * 1000) // Check every 5 minutes
   
-  // 提供调试命令
+  // Provide debug commands
   globalWindow.__debugSupabase = {
     getSubscriptionInfo: () => subscriptionManager.getSubscriptionInfo(),
     healthCheck: () => subscriptionManager.healthCheck(),
@@ -329,12 +329,12 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
     getActiveChannels: () => subscriptionManager.getActiveChannels()
   }
   
-  console.log('🔧 开发环境调试工具已加载，使用 window.__debugSupabase 访问')
+  console.log('Development debug tools loaded, access via window.__debugSupabase')
 }
 
 export { subscriptionManager }
 
-// 数据库类型定义
+// Database type definitions
 export interface User {
   id: string
   email: string
@@ -428,7 +428,7 @@ export interface AISummary {
   updated_at: string
 }
 
-// 扩展的会话接口，包含关联数据
+// Extended session interface with related data
 export interface RecordingSessionWithRelations extends RecordingSession {
   audio_files?: AudioFile[]
   transcriptions?: Transcription[]
@@ -446,7 +446,7 @@ interface LocalSessionCreateResponse {
 }
 
 
-// 实时转录数据类型
+// Real-time transcription data types
 export interface TranscriptEvent {
   index: number
   speaker: string
@@ -455,7 +455,7 @@ export interface TranscriptEvent {
   is_final: boolean
 }
 
-// AI 服务响应类型
+// AI service response types
 
 export interface AITitleResponse {
   title: string
@@ -471,7 +471,7 @@ export interface AITitleResponse {
   }
 }
 
-// 模板相关类型
+// Template-related types
 export interface SummaryTemplate {
   id: string
   name: string
@@ -496,7 +496,7 @@ export interface CreateTemplateRequest {
   tags?: string[]
 }
 
-// API 客户端类
+// API client class
 export class APIClient {
   private baseURL: string
   private getAuthToken: () => string | null
@@ -513,19 +513,14 @@ export class APIClient {
     const token = this.getAuthToken()
     const url = `${this.baseURL}${endpoint}`
     
-    // 确保URL是相对路径，强制通过Next.js代理
+    // Ensure URL is relative path, force through Next.js proxy
     const finalUrl = url.startsWith('/') ? url : `/${url}`
     
-    console.log('🌐 API请求调试:', {
-      originalUrl: url,
-      finalUrl,
+    // API request debugging
+    console.log('API request:', {
       method: options.method || 'GET',
-      hasToken: !!token,
-      tokenPreview: token ? `${token.substring(0, 20)}...` : null,
-      tokenLength: token ? token.length : 0,
       endpoint,
-      baseURL: this.baseURL,
-      windowOrigin: typeof window !== 'undefined' ? window.location.origin : 'server-side'
+      hasToken: !!token
     })
     
     const config: RequestInit = {
@@ -539,24 +534,22 @@ export class APIClient {
 
     const response = await fetch(finalUrl, config)
     
-    console.log('📡 API响应调试:', {
-      requestedUrl: finalUrl,
-      responseUrl: response.url,
+    // API response debugging
+    console.log('API response:', {
       status: response.status,
-      statusText: response.statusText,
       ok: response.ok
     })
     
     if (!response.ok) {
       const error = await response.json().catch(() => ({}))
-      console.error('❌ API错误详情:', error)
+      console.error('API error:', error)
       throw new Error(error.error?.message || `HTTP ${response.status}`)
     }
 
     return response.json()
   }
 
-  // 会话管理
+  // Session management
   async createSession(title: string, language: string = 'zh-CN', sttModel: string = 'whisper'): Promise<SessionCreateResponse> {
     const response = await this.request<LocalSessionCreateResponse>('/sessions', {
       method: 'POST',
@@ -567,15 +560,15 @@ export class APIClient {
       })
     })
     
-    // 检查响应格式并适配
+    // Check response format and adapt
     if (isSyncResponse(response)) {
-      // 新的统一响应格式
+      // New unified response format
       return response as SessionCreateResponse
     } else {
-      // 兼容旧格式，包装成新格式
+      // Compatible with old format, wrap into new format
       return {
         success: true,
-        message: "会话创建成功",
+        message: "Session created successfully",
         timestamp: new Date().toISOString(),
         data: response as SessionData
       }
@@ -583,8 +576,8 @@ export class APIClient {
   }
 
   async finalizeSession(sessionId: string): Promise<SessionFinalizeResponse> {
-    // 使用V2 API - 直接处理同步响应
-    const baseURL = this.baseURL.replace('/v1', '') // 移除v1，直接访问v2
+    // Use V2 API - handle sync response directly
+    const baseURL = this.baseURL.replace('/v1', '') // Remove v1, access v2 directly
     
     const response = await fetch(`${baseURL}/v2/sessions/${sessionId}/finalize`, {
       method: 'POST',
@@ -595,15 +588,15 @@ export class APIClient {
     })
 
     if (!response.ok) {
-      throw new Error(`会话结束失败: ${response.status}`)
+      throw new Error(`Session finalization failed: ${response.status}`)
     }
 
     const data = await response.json()
-    console.log('✅ V2会话结束完成:', data)
+    console.log('V2 session finalized:', data)
 
-    // 检查是否是异步任务响应
+    // Check if it's an async task response
     if (data.task_id && data.status === "started") {
-      // 异步任务，需要轮询
+      // Async task, need to poll
       const result = await this.pollV2TaskStatus(data.task_id)
       return {
         message: "Session finalized successfully.",
@@ -612,7 +605,7 @@ export class APIClient {
         final_data: result
       }
     } else {
-      // 同步响应，直接返回
+      // Sync response, return directly
       return {
         message: data.message || "Session finalized successfully.",
         session_id: sessionId,
@@ -688,9 +681,9 @@ export class APIClient {
     
     const data = await response.json()
     
-    // 检查是否是异步响应
+    // Check if it's an async response
     if (this.isAsyncResponse(data)) {
-      console.log('🔄 检测到异步响应，开始轮询:', data.task_id)
+      console.log('Async response detected, starting polling:', data.task_id)
       const result = await this.pollV2TaskStatus(data.task_id)
       const summaryResult = result as { summary: string; key_points?: string[]; metadata?: Record<string, unknown> }
       return {
@@ -699,8 +692,8 @@ export class APIClient {
         metadata: summaryResult.metadata || {}
       }
     } else {
-      // 直接返回同步响应
-      console.log('✅ 收到同步响应')
+      // Return sync response directly
+      console.log('Sync response received')
       return {
         summary: data.summary,
         key_points: data.key_points || [],
@@ -728,87 +721,74 @@ export class APIClient {
         }
 
         const taskStatusResponse: TaskStatusResponse = await response.json()
-        console.log(`🔄 V2任务状态轮询 ${attempt + 1}/${maxAttempts}:`, taskStatusResponse.status)
+        console.log(`V2 task status polling ${attempt + 1}/${maxAttempts}:`, taskStatusResponse.status)
 
-        // 使用新的类型守卫和工具函数
+        // Use new type guards and utility functions
         const status = getTaskStatus(taskStatusResponse)
         
-        // 任务完成
+        // Task completed
         if (status.isCompleted && taskStatusResponse.result) {
-          console.log('✅ V2任务完成，返回结果')
+          console.log('V2 task completed, returning result')
           return taskStatusResponse.result
         }
 
-        // 任务失败
+        // Task failed
         if (status.isFailed) {
-          console.error('❌ V2任务失败:', taskStatusResponse.error)
-          throw new Error(taskStatusResponse.error || '任务执行失败')
+          console.error('V2 task failed:', taskStatusResponse.error)
+          throw new Error(taskStatusResponse.error || 'Task execution failed')
         }
 
-        // 任务被取消
+        // Task cancelled
         if (status.isCancelled) {
-          console.warn('⚠️ V2任务被取消')
-          throw new Error('任务被取消')
+          console.warn('V2 task cancelled')
+          throw new Error('Task cancelled')
         }
 
-        // 任务仍在进行中
+        // Task still in progress
         if (status.isPending) {
-          console.log('⏳ V2任务进行中:', taskStatusResponse.progress)
+          console.log('V2 task in progress:', taskStatusResponse.progress)
           await new Promise(resolve => setTimeout(resolve, 3000))
           continue
         }
         
-        console.warn('⚠️ 未知任务状态:', taskStatusResponse.status)
+        console.warn('Unknown task status:', taskStatusResponse.status)
         
       } catch (error) {
-        console.error(`❌ V2任务状态查询失败 (第${attempt + 1}次):`, error)
+        console.error(`V2 task status query failed (attempt ${attempt + 1}):`, error)
         
-        // 如果是认证错误，立即重试而不是等待太多次
+        // If it's an auth error, retry immediately instead of waiting too long
         if (error instanceof Error && error.message.includes('403')) {
-          console.warn('🔑 检测到认证错误，快速重试...')
-          if (attempt >= 5) { // 认证错误只重试5次
-            throw new Error(`认证失败，请重新登录: ${error.message}`)
+          console.warn('Auth error detected, quick retry...')
+          if (attempt >= 5) { // Auth errors only retry 5 times
+            throw new Error(`Authentication failed, please login again: ${error.message}`)
           }
-          await new Promise(resolve => setTimeout(resolve, 1000)) // 认证错误时短暂等待
+          await new Promise(resolve => setTimeout(resolve, 1000)) // Brief wait for auth errors
           continue
         }
         
-        // 其他错误的处理：最后几次尝试时抛出错误
+        // Other error handling: throw error on last few attempts
         if (attempt >= maxAttempts - 3) {
           throw error
         }
         
-        // 等待后重试
+        // Wait before retry
         await new Promise(resolve => setTimeout(resolve, 3000))
       }
     }
 
-    throw new Error(`V2任务轮询超时 (${maxAttempts} 次尝试)`)
+    throw new Error(`V2 task polling timeout (${maxAttempts} attempts)`)
   }
 
-  async generateSessionSummary(sessionId: string, force: boolean = false, templateId?: string): Promise<{ summary: string; metadata: Record<string, unknown> }> {
-    console.log('🌐 APIClient.generateSessionSummary V2调试:', {
-      sessionId,
-      force,
-      templateId,
-      templateIdType: typeof templateId,
-      isTemplateIdString: typeof templateId === 'string'
-    })
-    
+  async generateSessionSummary(sessionId: string, _force: boolean = false, templateId?: string): Promise<{ summary: string; metadata: Record<string, unknown> }> {
     try {
-      const baseURL = this.baseURL.replace('/v1', '') // 移除v1，直接访问v2
+      const baseURL = this.baseURL.replace('/v1', '') // Remove v1, access v2 directly
       const token = this.getAuthToken()
       
-      console.log('🔑 认证调试:', {
-        hasToken: !!token,
-        tokenPreview: token ? `${token.substring(0, 20)}...` : null
-      })
-      
       if (!token) {
-        throw new Error('用户未认证，无法生成AI总结')
+        throw new Error('User not authenticated, unable to generate AI summary')
       }
       
-      // 直接提交V2异步任务，不需要先获取session（避免额外的API调用和认证问题）
+      // Submit V2 async task directly, no need to get session first (avoid additional API calls and auth issues)
       const taskResponse = await fetch(`${baseURL}/v2/sessions/${sessionId}/ai-summary`, {
         method: 'POST',
         headers: {
@@ -820,24 +800,18 @@ export class APIClient {
         })
       })
 
-      console.log('📡 AI总结任务提交响应:', {
-        status: taskResponse.status,
-        statusText: taskResponse.statusText,
-        ok: taskResponse.ok
-      })
-
       if (!taskResponse.ok) {
         const errorData = await taskResponse.json().catch(() => ({}))
-        console.error('❌ 提交AI总结任务失败:', errorData)
-        throw new Error(`提交AI总结任务失败: ${taskResponse.status} - ${errorData.detail || taskResponse.statusText}`)
+        console.error('Failed to submit AI summary task:', errorData)
+        throw new Error(`Failed to submit AI summary task: ${taskResponse.status} - ${errorData.detail || taskResponse.statusText}`)
       }
 
       const taskData = await taskResponse.json()
-      console.log('✅ V2 AI总结任务已提交:', taskData.task_id)
+      console.log('V2 AI summary task submitted:', taskData.task_id)
 
-      // 轮询任务状态
+      // Poll task status
       const result = await this.pollV2TaskStatus(taskData.task_id)
-      console.log('✅ V2 AI总结生成完成')
+      console.log('V2 AI summary generation completed')
       
       const summaryResult = result as { summary: string }
       return {
@@ -845,14 +819,14 @@ export class APIClient {
         metadata: { generated_by: 'v2_async_task' }
       }
     } catch (error) {
-      console.error('V2 AI总结生成失败:', error)
+      console.error('V2 AI summary generation failed:', error)
       throw error
     }
   }
 
   async generateTitle(sessionId: string, transcription: string, summary?: string): Promise<AITitleResponse> {
-    // 调用基于session的generate-title API
-    const baseURL = this.baseURL.replace('/v1', '') // 移除v1，直接访问v2
+    // Call session-based generate-title API
+    const baseURL = this.baseURL.replace('/v1', '') // Remove v1, access v2 directly
     
     const response = await fetch(`${baseURL}/v2/sessions/${sessionId}/generate-title`, {
       method: 'POST',
@@ -873,7 +847,7 @@ export class APIClient {
     return response.json()
   }
 
-  // 转录管理
+  // Transcription management
   async updateTranscription(transcriptionId: string, segments: unknown[]): Promise<Transcription> {
     return this.request<Transcription>(`/transcriptions/${transcriptionId}`, {
       method: 'PUT',
@@ -883,19 +857,12 @@ export class APIClient {
     })
   }
 
-  // 模板管理
+  // Template management
   async getTemplates(): Promise<SummaryTemplate[]> {
     const token = this.getAuthToken()
     
-    console.log('🔑 模板加载认证调试:', {
-      hasToken: !!token,
-      tokenPreview: token ? `${token.substring(0, 20)}...` : null,
-      tokenLength: token ? token.length : 0,
-      baseURL: this.baseURL
-    })
-    
     if (!token) {
-      throw new Error('用户未认证，无法加载模板')
+      throw new Error('User not authenticated, unable to load templates')
     }
     
     return this.request<SummaryTemplate[]>('/templates/')
@@ -925,17 +892,10 @@ export class APIClient {
     return this.request<SummaryTemplate>(`/templates/${templateId}`)
   }
 
-  // 更新会话模板选择
+  // Update session template selection
   async updateSessionTemplate(sessionId: string, templateId: string | null): Promise<{ message: string; session_id: string; template_id: string }> {
-    // 转换空字符串为null，避免后端UUID错误
+    // Convert empty string to null to avoid backend UUID errors
     const finalTemplateId = (!templateId || templateId === '' || templateId === 'no-template') ? null : templateId
-    
-    console.log('🔧 updateSessionTemplate调试:', {
-      original: templateId,
-      final: finalTemplateId,
-      originalType: typeof templateId,
-      finalType: typeof finalTemplateId
-    })
     
     return this.request<{ message: string; session_id: string; template_id: string }>(`/sessions/${sessionId}/template`, {
       method: 'PUT',
@@ -943,11 +903,11 @@ export class APIClient {
     })
   }
 
-  // 重新转录会话
+  // Retranscribe session
   async retranscribeSession(sessionId: string): Promise<{ success: boolean; message: string; session_id: string; status: string; task_id?: string }> {
     try {
-      // 使用V2异步API - 返回task_id
-      const baseURL = this.baseURL.replace('/v1', '') // 移除v1，直接访问v2
+      // Use V2 async API - returns task_id
+      const baseURL = this.baseURL.replace('/v1', '') // Remove v1, access v2 directly
       
       const taskResponse = await fetch(`${baseURL}/v2/sessions/${sessionId}/retranscribe`, {
         method: 'POST',
@@ -958,41 +918,41 @@ export class APIClient {
       })
 
       if (!taskResponse.ok) {
-        throw new Error(`重新转录失败: ${taskResponse.status}`)
+        throw new Error(`Retranscription failed: ${taskResponse.status}`)
       }
 
       const taskData = await taskResponse.json()
-      console.log('✅ V2重新转录任务已提交:', taskData.task_id)
+      console.log('V2 retranscription task submitted:', taskData.task_id)
 
-      // 启动异步轮询，但不等待完成就返回
+      // Start async polling but return immediately without waiting for completion
       this.pollV2TaskStatus(taskData.task_id).then(result => {
-        console.log('✅ V2重新转录完成:', result)
+        console.log('V2 retranscription completed:', result)
         
-        // 重新转录完成后，触发全局事件来通知前端更新
+        // After retranscription completes, trigger global event to notify frontend updates
         if (typeof window !== 'undefined') {
           const event = new CustomEvent('retranscriptionCompleted', {
             detail: { sessionId, result }
           })
           window.dispatchEvent(event)
-          console.log('🔔 触发重新转录完成事件:', { sessionId, result })
+          console.log('Triggered retranscription completed event:', { sessionId, result })
         }
       }).catch(error => {
-        console.error('❌ V2重新转录失败:', error)
+        console.error('V2 retranscription failed:', error)
       })
 
-      // 立即返回任务信息
+      // Return task info immediately
       return {
         success: true,
-        message: "重新转录任务已提交，正在后台处理",
+        message: "Retranscription task submitted, processing in background",
         session_id: sessionId,
         status: "processing",
         task_id: taskData.task_id
       }
       
     } catch (error) {
-      console.error('重新转录API调用失败，回退到V1:', error)
+      console.error('Retranscription API call failed, falling back to V1:', error)
       
-      // 回退到V1同步API（如果V2不可用）
+      // Fall back to V1 sync API (if V2 unavailable)
       try {
         return await this.request<{ success: boolean; message: string; session_id: string; status: string }>(`/sessions/${sessionId}/retranscribe`, {
           method: 'POST'
@@ -1001,7 +961,7 @@ export class APIClient {
         console.warn('V1 retranscribe API also failed:', error)
         return {
           success: false,
-          message: "重新转录功能暂时不可用",
+          message: "Retranscription feature temporarily unavailable",
           session_id: sessionId,
           status: "failed"
         }
