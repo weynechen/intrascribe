@@ -311,7 +311,7 @@ async def finalize_session_task(session_id: str, user_id: str):
                     # Prepare segment data for database storage
                     segment_data.append({
                         "index": i,
-                        "speaker": segment.get("speaker", "Speaker 1"),
+                        "speaker": segment.get("speaker", ""),
                         "timestamp": segment.get("timestamp"),
                         "text": text,
                         "is_final": segment.get("is_final", True)

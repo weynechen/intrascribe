@@ -227,7 +227,7 @@ class Transcriber(Agent):
         try:
             transcription_data = {
                 "index": len(text) // 10,
-                "speaker": "Speaker 1", 
+                "speaker": "", 
                 "timestamp": datetime.now().isoformat(),
                 "text": text,
                 "is_final": True

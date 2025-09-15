@@ -387,7 +387,7 @@ async def _process_batch_audio_file(
                 speaker_segments = [{
                     "start_time": 0.0,
                     "end_time": duration_seconds,
-                    "speaker_label": "Speaker 1",
+                    "speaker_label": "",
                     "duration": duration_seconds
                 }]
             else:
@@ -403,7 +403,7 @@ async def _process_batch_audio_file(
             
             for i, speaker_segment in enumerate(speaker_segments):
                 logger.info(f"🔄 Processing segment {i+1}/{len(speaker_segments)}: "
-                           f"{speaker_segment.get('speaker_label', 'Speaker 1')} "
+                           f"{speaker_segment.get('speaker_label', '')} "
                            f"[{speaker_segment.get('start_time', 0):.1f}s-{speaker_segment.get('end_time', 0):.1f}s]")
                 
                 # Extract audio segment for this speaker
@@ -450,7 +450,7 @@ async def _process_batch_audio_file(
                         # Create segment data
                         segment_data = {
                             "index": len(all_transcription_segments),
-                            "speaker": speaker_segment.get('speaker_label', 'Speaker 1'),
+                            "speaker": speaker_segment.get('speaker_label', ''),
                             "start_time": speaker_segment.get('start_time', 0),
                             "end_time": speaker_segment.get('end_time', 0),
                             "text": segment_text,
