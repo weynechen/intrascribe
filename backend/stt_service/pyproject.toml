@@ -16,5 +16,8 @@ dependencies = [
     "soundfile>=0.12.1",
     "torch>=2.1.0",
     "torchaudio>=2.1.0",
+    "transformers>=4.36.0",
+    "datasets>=2.14.0",
+    "accelerate>=0.24.0",
     "uvicorn[standard]>=0.24.0",
 ]

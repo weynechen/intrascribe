@@ -12,7 +12,6 @@ from pathlib import Path
 BACKEND_ROOT = Path(__file__).parent.parent
 ENV_FILE_PATH = BACKEND_ROOT / ".env"
 
-
 class BaseServiceConfig(BaseSettings):
     """Base configuration for all microservices"""
     
@@ -89,15 +88,18 @@ class ServiceURLConfig(BaseSettings):
 class STTConfig(BaseSettings):
     """STT service specific configuration"""
     
-    model_dir: str = os.getenv("STT_MODEL_DIR", "iic/SenseVoiceSmall")
-    output_dir: str = os.getenv("STT_OUTPUT_DIR", "./temp_audio")
+    model_dir: str = "iic/SenseVoiceSmall"
+    output_dir: str = "./temp_audio"
     delete_audio_file: bool = True
     max_audio_length: int = 300  # 5 minutes max
     batch_size: int = 1
+    language: str = "chinese"  # Language for speech recognition: "auto", "chinese", "english", etc.
     
     class Config:
         env_file = str(ENV_FILE_PATH)
         extra = "ignore"
+        protected_namespaces = ('settings_',)
+        env_prefix = "STT_"
 
 
 class SpeakerConfig(BaseSettings):

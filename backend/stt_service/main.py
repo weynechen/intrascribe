@@ -23,12 +23,19 @@ from shared.models import AudioData, TranscriptionRequest, TranscriptionResponse
 from shared.utils import timing_decorator
 
 from models import model_manager
+from dotenv import load_dotenv
+from pathlib import Path
 
 # Initialize logger
 logger = ServiceLogger("stt-service")
 
 # Service startup time
 service_start_time = time.time()
+
+
+backend_root = Path(__file__).parent.parent
+env_file = backend_root / ".env"
+load_dotenv(env_file)
 
 
 @asynccontextmanager
