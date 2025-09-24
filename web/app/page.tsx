@@ -41,6 +41,7 @@ interface RecordingSession {
   status: 'created' | 'recording' | 'processing' | 'completed' | 'failed' | 'cancelled'
   created_at: string
   duration_seconds?: number
+  template_id?: string
   transcriptions?: Array<{
     id: string
     content: string
@@ -102,8 +103,8 @@ export default function HomePage() {
   // Audio refresh ref
   const refreshAudioRef = useRef<(() => Promise<void>) | null>(null)
   
-  // Template selection state - temporarily remove unused state
-  // const [selectedTemplateId, setSelectedTemplateId] = useState<string | undefined>()
+  // Template selection state
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | undefined>()
 
   // Handle real-time transcription data
   const handleTranscript = useCallback((transcriptEvent: TranscriptEvent) => {
@@ -245,6 +246,15 @@ export default function HomePage() {
     setTranscriptionId('')
     setShowAISummaryPanel(false)
     
+    // Set template ID from session
+    const sessionTemplateId = selectedSession.template_id || undefined
+    setSelectedTemplateId(sessionTemplateId)
+    console.log('🎯 会话选择时设置模板ID:', {
+      sessionId: selectedSession.id,
+      sessionTemplateId: sessionTemplateId,
+      templateIdType: typeof sessionTemplateId
+    })
+    
     // Restore transcription content
     if (selectedSession.transcriptions && selectedSession.transcriptions.length > 0) {
       const transcription = selectedSession.transcriptions[0]
@@ -384,16 +394,14 @@ export default function HomePage() {
       return
     }
 
-    // Use provided template ID or default
-    let finalTemplateId = templateId
-    if (!finalTemplateId) {
-      const currentSession = sessions.find(s => s.id === sessionId)
-      if (!currentSession) {
-        toast.error('Cannot find corresponding recording session, unable to generate summary')
-        return
-      }
-      finalTemplateId = '' // Use default template
-    }
+    // Use provided template ID, fallback to selected template ID, or use empty string for default
+    const finalTemplateId = templateId || selectedTemplateId || ''
+    
+    console.log('handleAISummary debug:', {
+      providedTemplateId: templateId,
+      selectedTemplateId: selectedTemplateId,
+      finalTemplateId: finalTemplateId
+    })
 
     setShowAISummaryPanel(true)
     setIsLoadingSummary(true)
@@ -425,7 +433,7 @@ export default function HomePage() {
     } finally {
       setIsLoadingSummary(false)
     }
-  }, [fullTranscriptText, currentTranscript, selectedSessionId, currentRecordingSessionId, generateSummary, generateTitle, sessions])
+  }, [fullTranscriptText, currentTranscript, selectedSessionId, currentRecordingSessionId, selectedTemplateId, generateSummary, generateTitle, sessions])
 
   // Handle template selection
   const handleTemplateSelect = useCallback(async (sessionId: string, templateId: string) => {
@@ -434,6 +442,18 @@ export default function HomePage() {
       if (apiClient) {
         await apiClient.updateSessionTemplate(sessionId, templateId)
         await fetchSessions()
+        
+        // Update local template selection state if this is the currently selected session
+        if (sessionId === selectedSessionId) {
+          const newTemplateId = templateId || undefined
+          setSelectedTemplateId(newTemplateId)
+          console.log('🎯 FileList模板选择同步到AI面板:', {
+            sessionId: sessionId,
+            templateId: templateId,
+            newTemplateId: newTemplateId
+          })
+        }
+        
         toast.success('Template selection saved')
       } else {
         toast.error('Unable to save template selection')
@@ -442,7 +462,7 @@ export default function HomePage() {
       console.error('Failed to update session template:', error)
       toast.error('Failed to save template selection')
     }
-  }, [apiClient, fetchSessions])
+  }, [apiClient, fetchSessions, selectedSessionId])
 
   // Handle session deletion
   const handleDeleteSession = useCallback(async (sessionId: string) => {
@@ -1102,6 +1122,8 @@ export default function HomePage() {
                   transcriptionId={transcriptionId}
                   onRefreshSessions={handleRefreshSessions}
                   onGenerateSummary={handleAISummary}
+                  selectedTemplateId={selectedTemplateId}
+                  onTemplateChange={setSelectedTemplateId}
                 />
               </div>
             </div>

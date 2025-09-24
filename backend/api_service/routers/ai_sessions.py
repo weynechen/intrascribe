@@ -24,6 +24,7 @@ from schemas import (
 )
 from services.ai_service import ai_service
 from repositories.session_repository import session_repository
+from repositories.user_repository import template_repository
 from routers.transcriptions import transcription_repository
 from routers.tasks_v2 import update_task_status
 
@@ -186,7 +187,6 @@ async def _process_ai_summary_task(task_id: str, session_id: str, user_id: str, 
         template_content = None
         effective_template_id = template_id or (session.metadata.get("template_id") if session.metadata else None)
         if effective_template_id:
-            from ..repositories.user_repository import template_repository
             template = template_repository.get_template_by_id(effective_template_id, user_id)
             if template:
                 template_content = template["template_content"]
@@ -376,7 +376,6 @@ async def generate_session_summary(
         # Get template content if template ID provided
         template_content = None
         if request.template_id:
-            from ..repositories.user_repository import template_repository
             template = template_repository.get_template_by_id(request.template_id, current_user.id)
             if template:
                 template_content = template["template_content"]

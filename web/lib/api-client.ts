@@ -111,7 +111,7 @@ class HttpClient {
     url: string,
     options: RequestOptions = {}
   ): Promise<T> {
-    const { timeout = 30000, skipAuth = false, ...fetchOptions } = options
+    const { timeout = 60000, skipAuth = false, ...fetchOptions } = options
 
     // Setup headers
     const headers: Record<string, string> = {

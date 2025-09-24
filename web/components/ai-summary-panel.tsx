@@ -24,6 +24,8 @@ interface AISummaryPanelProps {
   transcriptionId?: string
   onRefreshSessions?: () => void
   onGenerateSummary?: (templateId?: string) => void
+  selectedTemplateId?: string
+  onTemplateChange?: (templateId: string | undefined) => void
 }
 
 export function AISummaryPanel({ 
@@ -37,11 +39,12 @@ export function AISummaryPanel({
   summaryId,
   transcriptionId,
   onRefreshSessions,
-  onGenerateSummary
+  onGenerateSummary,
+  selectedTemplateId,
+  onTemplateChange
 }: AISummaryPanelProps) {
   const [markdownContent, setMarkdownContent] = useState<string>('')
   const [isSaving, setIsSaving] = useState(false)
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string | undefined>()
 
   const { session } = useAuth()
 
@@ -203,7 +206,7 @@ export function AISummaryPanel({
             </div>
             <TemplateSelector
               selectedTemplateId={selectedTemplateId}
-              onTemplateChange={setSelectedTemplateId}
+              onTemplateChange={onTemplateChange || (() => {})}
               onGenerateSummary={onGenerateSummary || (() => {})}
               isLoading={isLoading}
             />
